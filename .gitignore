@@ -50,3 +50,16 @@
 
 # Embedded web-server pid file
 /.web-server-pid
+
+# Environment files (contains DB credentials)
+backend/.env.local
+backend/.env.*.local
+
+# Symfony cache and logs
+backend/var/
+
+# Vendors (restored via composer install)
+backend/vendor/
+
+# Docker volumes (managed by Docker)
+db_data/
