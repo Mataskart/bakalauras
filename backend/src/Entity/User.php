@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\UserRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -40,6 +42,17 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column]
     private ?\DateTimeImmutable $createdAt = null;
+
+    /**
+     * @var Collection<int, DrivingSession>
+     */
+    #[ORM\OneToMany(targetEntity: DrivingSession::class, mappedBy: 'driver')]
+    private Collection $drivingSessions;
+
+    public function __construct()
+    {
+        $this->drivingSessions = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -143,6 +156,36 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, DrivingSession>
+     */
+    public function getDrivingSessions(): Collection
+    {
+        return $this->drivingSessions;
+    }
+
+    public function addDrivingSession(DrivingSession $drivingSession): static
+    {
+        if (!$this->drivingSessions->contains($drivingSession)) {
+            $this->drivingSessions->add($drivingSession);
+            $drivingSession->setDriver($this);
+        }
+
+        return $this;
+    }
+
+    public function removeDrivingSession(DrivingSession $drivingSession): static
+    {
+        if ($this->drivingSessions->removeElement($drivingSession)) {
+            // set the owning side to null (unless already changed)
+            if ($drivingSession->getDriver() === $this) {
+                $drivingSession->setDriver(null);
+            }
+        }
 
         return $this;
     }
