@@ -55,6 +55,9 @@
 backend/.env.local
 backend/.env.*.local
 
+backend/.env.dev
+backend/.env.*.dev
+
 # Symfony cache and logs
 backend/var/
 
