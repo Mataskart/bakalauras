@@ -5,6 +5,9 @@ namespace App\Entity;
 use App\Repository\DrivingEventRepository;
 use Doctrine\ORM\Mapping as ORM;
 
+// Represents a single sensor reading captured during an active driving session.
+// The mobile app sends these periodically with accelerometer and GPS data.
+// The scoring algorithm analyses these events to detect dangerous driving behaviour.
 #[ORM\Entity(repositoryClass: DrivingEventRepository::class)]
 class DrivingEvent
 {
@@ -13,15 +16,19 @@ class DrivingEvent
     #[ORM\Column]
     private ?int $id = null;
 
+    // Timestamp of when the reading was captured on the device
     #[ORM\Column]
     private ?\DateTimeImmutable $recordedAt = null;
 
+    // GPS coordinates at the time of the reading
     #[ORM\Column]
     private ?float $latitude = null;
 
     #[ORM\Column]
     private ?float $longitude = null;
 
+    // Raw accelerometer values in m/s²
+    // X = lateral (left/right), Y = longitudinal (forward/back), Z = vertical
     #[ORM\Column]
     private ?float $accelerationX = null;
 
@@ -31,9 +38,13 @@ class DrivingEvent
     #[ORM\Column]
     private ?float $accelerationZ = null;
 
+    // Classified by the scoring algorithm after analysis:
+    // 'normal', 'hard_brake', 'hard_acceleration', 'sharp_turn'
+    // Null until the scoring service processes this event
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $eventType = null;
 
+    // The session this event belongs to
     #[ORM\ManyToOne(inversedBy: 'drivingEvents')]
     #[ORM\JoinColumn(nullable: false)]
     private ?DrivingSession $session = null;
@@ -51,7 +62,6 @@ class DrivingEvent
     public function setRecordedAt(\DateTimeImmutable $recordedAt): static
     {
         $this->recordedAt = $recordedAt;
-
         return $this;
     }
 
@@ -63,7 +73,6 @@ class DrivingEvent
     public function setLatitude(float $latitude): static
     {
         $this->latitude = $latitude;
-
         return $this;
     }
 
@@ -72,10 +81,9 @@ class DrivingEvent
         return $this->longitude;
     }
 
-    public function setLongitude(float $longtitude): static
+    public function setLongitude(float $longitude): static
     {
-        $this->longitude = $longtitude;
-
+        $this->longitude = $longitude;
         return $this;
     }
 
@@ -87,7 +95,6 @@ class DrivingEvent
     public function setAccelerationX(float $accelerationX): static
     {
         $this->accelerationX = $accelerationX;
-
         return $this;
     }
 
@@ -99,7 +106,6 @@ class DrivingEvent
     public function setAccelerationY(float $accelerationY): static
     {
         $this->accelerationY = $accelerationY;
-
         return $this;
     }
 
@@ -111,7 +117,6 @@ class DrivingEvent
     public function setAccelerationZ(float $accelerationZ): static
     {
         $this->accelerationZ = $accelerationZ;
-
         return $this;
     }
 
@@ -123,7 +128,6 @@ class DrivingEvent
     public function setEventType(?string $eventType): static
     {
         $this->eventType = $eventType;
-
         return $this;
     }
 
@@ -135,7 +139,6 @@ class DrivingEvent
     public function setSession(?DrivingSession $session): static
     {
         $this->session = $session;
-
         return $this;
     }
 }

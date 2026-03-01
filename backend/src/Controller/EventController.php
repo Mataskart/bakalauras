@@ -11,9 +11,14 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+// Handles ingestion of driving events sent by the mobile app during an active session.
+// Events are processed in batches and the session score is recalculated after each batch.
 #[Route('/api/sessions/{sessionId}/events')]
 class EventController extends AbstractController
 {
+    // POST /api/sessions/{sessionId}/events
+    // Accepts a single event object or an array of events in the request body.
+    // Recalculates and persists the session score after every batch.
     #[Route('', name: 'api_events_add', methods: ['POST'])]
     public function add(
         int $sessionId,
@@ -27,17 +32,20 @@ class EventController extends AbstractController
             return $this->json(['error' => 'Session not found'], 404);
         }
 
+        // Prevent users from submitting events to sessions they don't own
         if ($session->getDriver() !== $this->getUser()) {
             return $this->json(['error' => 'Access denied'], 403);
         }
 
+        // Only accept events for sessions that are currently recording
         if ($session->getStatus() !== 'active') {
             return $this->json(['error' => 'Session is not active'], 400);
         }
 
         $data = json_decode($request->getContent(), true);
 
-        // Support both single event and batch array
+        // Normalise input — the app can send a single object or a batch array.
+        // Wrapping a single event in an array allows the same loop to handle both.
         $eventsData = isset($data[0]) ? $data : [$data];
 
         foreach ($eventsData as $eventData) {
@@ -57,9 +65,11 @@ class EventController extends AbstractController
             $em->persist($event);
         }
 
+        // Persist all events in a single transaction for efficiency
         $em->flush();
 
-        // Recalculate score after every batch
+        // Recalculate score across all session events including the new batch.
+        // Score is stored on the session so it can be returned when the session is fetched.
         $score = $scoring->calculateScore($session);
         $session->setScore($score);
         $em->flush();

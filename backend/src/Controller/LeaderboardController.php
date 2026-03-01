@@ -9,13 +9,18 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
+// Returns a ranked list of the top 10 drivers by average session score.
+// Only completed sessions with a calculated score are included.
 #[Route('/api')]
 class LeaderboardController extends AbstractController
 {
+    // GET /api/leaderboard — returns top 10 users ranked by average driving score.
+    // Rank is derived from position in the result set, not stored in the database.
     #[Route('/leaderboard', name: 'api_leaderboard', methods: ['GET'])]
     public function index(EntityManagerInterface $em): JsonResponse
     {
-        // Get average score per user across all completed sessions with a score
+        // Aggregate scores per user using DQL — groups by user and averages
+        // their scores across all completed sessions that have a score assigned
         $results = $em->createQueryBuilder()
             ->select('u.id, u.firstName, u.lastName, AVG(s.score) as averageScore, COUNT(s.id) as totalSessions')
             ->from(User::class, 'u')
@@ -29,6 +34,9 @@ class LeaderboardController extends AbstractController
             ->getQuery()
             ->getArrayResult();
 
+        // Map raw query results to a clean response shape.
+        // array_keys() is passed as the second argument to array_map()
+        // so we get the numeric index to calculate the rank.
         $leaderboard = array_map(fn(array $row, int $rank) => [
             'rank' => $rank + 1,
             'name' => $row['firstName'] . ' ' . $row['lastName'],
