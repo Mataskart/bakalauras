@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\DrivingSessionRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: DrivingSessionRepository::class)]
@@ -28,6 +30,17 @@ class DrivingSession
     #[ORM\ManyToOne(inversedBy: 'drivingSessions')]
     #[ORM\JoinColumn(nullable: false)]
     private ?User $driver = null;
+
+    /**
+     * @var Collection<int, DrivingEvent>
+     */
+    #[ORM\OneToMany(targetEntity: DrivingEvent::class, mappedBy: 'session', orphanRemoval: true)]
+    private Collection $drivingEvents;
+
+    public function __construct()
+    {
+        $this->drivingEvents = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -90,6 +103,36 @@ class DrivingSession
     public function setDriver(?User $driver): static
     {
         $this->driver = $driver;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, DrivingEvent>
+     */
+    public function getDrivingEvents(): Collection
+    {
+        return $this->drivingEvents;
+    }
+
+    public function addDrivingEvent(DrivingEvent $drivingEvent): static
+    {
+        if (!$this->drivingEvents->contains($drivingEvent)) {
+            $this->drivingEvents->add($drivingEvent);
+            $drivingEvent->setSession($this);
+        }
+
+        return $this;
+    }
+
+    public function removeDrivingEvent(DrivingEvent $drivingEvent): static
+    {
+        if ($this->drivingEvents->removeElement($drivingEvent)) {
+            // set the owning side to null (unless already changed)
+            if ($drivingEvent->getSession() === $this) {
+                $drivingEvent->setSession(null);
+            }
+        }
 
         return $this;
     }
