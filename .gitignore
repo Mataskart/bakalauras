@@ -66,3 +66,6 @@ backend/vendor/
 
 # Docker volumes (managed by Docker)
 db_data/
+
+# JWT keys
+backend/config/jwt/
