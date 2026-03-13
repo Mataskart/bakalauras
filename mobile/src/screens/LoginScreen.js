@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, StatusBar
+  Text, TextInput, TouchableOpacity,
+  StyleSheet, Alert, ActivityIndicator,
+  StatusBar, KeyboardAvoidingView, Platform, ScrollView, View
 } from 'react-native';
 import client from '../api/client';
 import { saveToken } from '../storage/token';
 
-// Accent color inspired by VS Code blue
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
 const SURFACE = '#161b22';
@@ -39,58 +39,69 @@ export default function LoginScreen({ onLogin }) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <StatusBar barStyle="light-content" backgroundColor={BG} />
-
-      {/* Logo area */}
-      <View style={styles.logoArea}>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>K</Text>
+      <ScrollView
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Logo area */}
+        <View style={styles.logoArea}>
+          <View style={styles.logoMark}>
+            <Text style={styles.logoMarkText}>K</Text>
+          </View>
+          <Text style={styles.title}>keliq</Text>
+          <Text style={styles.subtitle}>Drive smart. Score high.</Text>
         </View>
-        <Text style={styles.title}>keliq</Text>
-        <Text style={styles.subtitle}>Drive smart. Score high.</Text>
-      </View>
 
-      {/* Form */}
-      <View style={styles.form}>
-        <Text style={styles.label}>EMAIL</Text>
-        <TextInput
-          style={[styles.input, emailFocused && styles.inputFocused]}
-          placeholder="you@example.com"
-          placeholderTextColor={MUTED}
-          value={email}
-          onChangeText={setEmail}
-          onFocus={() => setEmailFocused(true)}
-          onBlur={() => setEmailFocused(false)}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+        {/* Form */}
+        <View style={styles.form}>
+          <Text style={styles.label}>EMAIL</Text>
+          <TextInput
+            style={[styles.input, emailFocused && styles.inputFocused]}
+            placeholder="you@example.com"
+            placeholderTextColor={MUTED}
+            value={email}
+            onChangeText={setEmail}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+          />
 
-        <Text style={styles.label}>PASSWORD</Text>
-        <TextInput
-          style={[styles.input, passwordFocused && styles.inputFocused]}
-          placeholder="••••••••"
-          placeholderTextColor={MUTED}
-          value={password}
-          onChangeText={setPassword}
-          onFocus={() => setPasswordFocused(true)}
-          onBlur={() => setPasswordFocused(false)}
-          secureTextEntry
-        />
+          <Text style={styles.label}>PASSWORD</Text>
+          <TextInput
+            style={[styles.input, passwordFocused && styles.inputFocused]}
+            placeholder="••••••••"
+            placeholderTextColor={MUTED}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading
-            ? <ActivityIndicator color={TEXT} />
-            : <Text style={styles.buttonText}>LOG IN</Text>
-          }
-        </TouchableOpacity>
-      </View>
-    </View>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading
+              ? <ActivityIndicator color={TEXT} />
+              : <Text style={styles.buttonText}>LOG IN</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -98,8 +109,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BG,
-    paddingHorizontal: 28,
+  },
+  inner: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 40,
   },
   logoArea: {
     alignItems: 'center',
