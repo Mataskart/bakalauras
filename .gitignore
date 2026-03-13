@@ -69,3 +69,4 @@ db_data/
 
 # JWT keys
 backend/config/jwt/
+node_modules
