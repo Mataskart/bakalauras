@@ -1,16 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator
+  Alert, ActivityIndicator, StatusBar
 } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import client from '../api/client';
 import { removeToken } from '../storage/token';
 
+const ACCENT = '#007ACC';
+const BG = '#0e1117';
+const SURFACE = '#161b22';
+const BORDER = '#30363d';
+const TEXT = '#e6edf3';
+const MUTED = '#8b949e';
+const DANGER = '#f85149';
+
 export default function HomeScreen({ onLogout }) {
-  const session = useRef(null);       // active session object
-  const [score, setScore] = useState(null);            // current score
+  const session = useRef(null);
+  const [score, setScore] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
 
@@ -32,13 +40,11 @@ export default function HomeScreen({ onLogout }) {
   };
 
   const startTracking = () => {
-    // Subscribe to accelerometer at 1 reading per second
     Accelerometer.setUpdateInterval(1000);
     accelSubscription.current = Accelerometer.addListener((data) => {
       accelerometerData.current = data;
     });
 
-    // Send a batch of events to the backend every 5 seconds
     intervalRef.current = setInterval(async () => {
       try {
         const location = await Location.getCurrentPositionAsync({});
@@ -76,7 +82,7 @@ export default function HomeScreen({ onLogout }) {
     setTracking(false);
   };
 
-const handleStartSession = async () => {
+  const handleStartSession = async () => {
     setLoading(true);
     try {
       const response = await client.post('/sessions');
@@ -111,47 +117,81 @@ const handleStartSession = async () => {
   };
 
   const getScoreColor = (s) => {
-    if (s >= 80) return '#2ecc71';
-    if (s >= 50) return '#f39c12';
-    return '#e74c3c';
+    if (s >= 80) return '#3fb950';
+    if (s >= 50) return '#d29922';
+    return DANGER;
+  };
+
+  const getScoreLabel = (s) => {
+    if (s >= 80) return 'GREAT';
+    if (s >= 50) return 'FAIR';
+    return 'POOR';
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>keliq</Text>
+      <StatusBar barStyle="light-content" backgroundColor={BG} />
 
-      {score !== null && (
-        <View style={styles.scoreContainer}>
-          <Text style={styles.scoreLabel}>Current Score</Text>
-          <Text style={[styles.score, { color: getScoreColor(score) }]}>
-            {score}
-          </Text>
-          <Text style={styles.scoreMax}>/100</Text>
-        </View>
-      )}
-
-      {tracking && (
-        <View style={styles.trackingIndicator}>
-          <Text style={styles.trackingText}>● Recording...</Text>
-        </View>
-      )}
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 32 }} />
-      ) : (
-        <TouchableOpacity
-          style={[styles.button, tracking ? styles.buttonStop : styles.buttonStart]}
-          onPress={tracking ? handleStopSession : handleStartSession}
-        >
-          <Text style={styles.buttonText}>
-            {tracking ? 'Stop Drive' : 'Start Drive'}
-          </Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>keliq</Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logoutText}>LOG OUT</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Score display */}
+      <View style={styles.scoreArea}>
+        {score !== null ? (
+          <>
+            <Text style={styles.scoreLabel}>DRIVE SCORE</Text>
+            <Text style={[styles.score, { color: getScoreColor(score) }]}>
+              {score}
+            </Text>
+            <View style={[styles.scoreBadge, { backgroundColor: getScoreColor(score) + '22' }]}>
+              <Text style={[styles.scoreBadgeText, { color: getScoreColor(score) }]}>
+                {getScoreLabel(score)}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.scoreLabel}>DRIVE SCORE</Text>
+            <Text style={styles.scorePlaceholder}>—</Text>
+            <Text style={styles.scoreHint}>
+              {tracking ? 'Calculating...' : 'Start a drive to see your score'}
+            </Text>
+          </>
+        )}
+      </View>
+
+      {/* Tracking pulse indicator */}
+      {tracking && (
+        <View style={styles.recordingRow}>
+          <View style={styles.recordingDot} />
+          <Text style={styles.recordingText}>RECORDING</Text>
+        </View>
       )}
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Log out</Text>
-      </TouchableOpacity>
+      {/* Main action button */}
+      <View style={styles.buttonArea}>
+        {loading ? (
+          <ActivityIndicator size="large" color={ACCENT} />
+        ) : (
+          <TouchableOpacity
+            style={[styles.driveButton, tracking ? styles.driveButtonStop : styles.driveButtonStart]}
+            onPress={tracking ? handleStopSession : handleStartSession}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.driveButtonText}>
+              {tracking ? 'STOP' : 'START'}
+            </Text>
+            <Text style={styles.driveButtonSub}>
+              {tracking ? 'DRIVE' : 'DRIVE'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -159,70 +199,119 @@ const handleStartSession = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 32,
+    backgroundColor: BG,
+    paddingHorizontal: 28,
+    paddingTop: 60,
+    paddingBottom: 24,
   },
-  title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#1a1a2e',
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 48,
   },
-  scoreContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  scoreLabel: {
-    fontSize: 18,
-    color: '#666',
-    marginRight: 12,
-  },
-  score: {
-    fontSize: 72,
-    fontWeight: 'bold',
-  },
-  scoreMax: {
+  title: {
     fontSize: 24,
-    color: '#999',
-    marginLeft: 4,
-  },
-  trackingIndicator: {
-    marginBottom: 24,
-  },
-  trackingText: {
-    color: '#e74c3c',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  button: {
-    padding: 20,
-    borderRadius: 50,
-    width: 180,
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  buttonStart: {
-    backgroundColor: '#1a1a2e',
-  },
-  buttonStop: {
-    backgroundColor: '#e74c3c',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  logoutButton: {
-    marginTop: 16,
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: -0.5,
   },
   logoutText: {
-    color: '#999',
-    fontSize: 14,
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+    letterSpacing: 1.5,
+  },
+  scoreArea: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  scoreLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  score: {
+    fontSize: 96,
+    fontWeight: '800',
+    letterSpacing: -4,
+    lineHeight: 100,
+  },
+  scorePlaceholder: {
+    fontSize: 96,
+    fontWeight: '300',
+    color: BORDER,
+    lineHeight: 100,
+  },
+  scoreHint: {
+    fontSize: 13,
+    color: MUTED,
+    marginTop: 12,
+  },
+  scoreBadge: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  scoreBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+    gap: 8,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: DANGER,
+  },
+  recordingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: DANGER,
+    letterSpacing: 2,
+  },
+  buttonArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  driveButton: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  driveButtonStart: {
+    backgroundColor: ACCENT + '18',
+    borderColor: ACCENT,
+  },
+  driveButtonStop: {
+    backgroundColor: DANGER + '18',
+    borderColor: DANGER,
+  },
+  driveButtonText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: 2,
+  },
+  driveButtonSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: MUTED,
+    letterSpacing: 3,
+    marginTop: 2,
   },
 });

@@ -1,10 +1,18 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet,
-  ActivityIndicator, RefreshControl
+  ActivityIndicator, RefreshControl, StatusBar
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import client from '../api/client';
+
+const ACCENT = '#007ACC';
+const BG = '#0e1117';
+const SURFACE = '#161b22';
+const BORDER = '#30363d';
+const TEXT = '#e6edf3';
+const MUTED = '#8b949e';
+const DANGER = '#f85149';
 
 export default function HistoryScreen() {
   const [sessions, setSessions] = useState([]);
@@ -23,7 +31,6 @@ export default function HistoryScreen() {
     }
   };
 
-  // Reload every time the tab is focused
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
@@ -32,10 +39,10 @@ export default function HistoryScreen() {
   );
 
   const getScoreColor = (score) => {
-    if (score === null) return '#999';
-    if (score >= 80) return '#2ecc71';
-    if (score >= 50) return '#f39c12';
-    return '#e74c3c';
+    if (score === null) return MUTED;
+    if (score >= 80) return '#3fb950';
+    if (score >= 50) return '#d29922';
+    return DANGER;
   };
 
   const formatDate = (iso) => {
@@ -57,45 +64,66 @@ export default function HistoryScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <StatusBar barStyle="light-content" backgroundColor={BG} />
+        <ActivityIndicator size="large" color={ACCENT} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={BG} />
+
       <Text style={styles.title}>Drive History</Text>
+
       {sessions.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.empty}>No drives yet — go for a drive!</Text>
+          <Text style={styles.emptyIcon}>🚗</Text>
+          <Text style={styles.emptyTitle}>No drives yet</Text>
+          <Text style={styles.emptySubtitle}>Hit the road to see your history here.</Text>
         </View>
       ) : (
         <FlatList
           data={sessions}
           keyExtractor={(item) => item.id.toString()}
+          showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => {
-              setRefreshing(true);
-              fetchSessions();
-            }} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchSessions(); }}
+              tintColor={ACCENT}
+            />
           }
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <View style={styles.cardLeft}>
-                <Text style={styles.date}>{formatDate(item.startedAt)}</Text>
-                <Text style={styles.duration}>
-                  {formatDuration(item.startedAt, item.endedAt)}
-                </Text>
-                <Text style={[
-                  styles.status,
-                  { color: item.status === 'active' ? '#f39c12' : '#2ecc71' }
-                ]}>
-                  {item.status === 'active' ? 'In progress' : 'Completed'}
-                </Text>
+              {/* Left: score bar accent */}
+              <View style={[styles.cardAccent, { backgroundColor: getScoreColor(item.score) }]} />
+
+              <View style={styles.cardBody}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.date}>{formatDate(item.startedAt)}</Text>
+                  <Text style={[styles.score, { color: getScoreColor(item.score) }]}>
+                    {item.score !== null ? item.score : '—'}
+                  </Text>
+                </View>
+
+                <View style={styles.cardBottom}>
+                  <Text style={styles.duration}>
+                    {formatDuration(item.startedAt, item.endedAt)}
+                  </Text>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: item.status === 'active' ? '#d29922' + '22' : '#3fb950' + '22' }
+                  ]}>
+                    <Text style={[
+                      styles.statusText,
+                      { color: item.status === 'active' ? '#d29922' : '#3fb950' }
+                    ]}>
+                      {item.status === 'active' ? 'IN PROGRESS' : 'COMPLETED'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <Text style={[styles.score, { color: getScoreColor(item.score) }]}>
-                {item.score !== null ? item.score : '—'}
-              </Text>
             </View>
           )}
         />
@@ -107,54 +135,90 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: BG,
     paddingTop: 60,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: BG,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a2e',
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: -0.5,
     marginBottom: 24,
   },
-  empty: {
-    color: '#999',
-    fontSize: 16,
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: MUTED,
+    textAlign: 'center',
   },
   card: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: SURFACE,
     borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: 'hidden',
   },
-  cardLeft: {
+  cardAccent: {
+    width: 4,
+  },
+  cardBody: {
     flex: 1,
+    padding: 16,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
   date: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: 13,
     fontWeight: '600',
-    marginBottom: 4,
+    color: TEXT,
+    flex: 1,
+    marginRight: 12,
+  },
+  score: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+    lineHeight: 34,
+  },
+  cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   duration: {
     fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
+    color: MUTED,
   },
-  status: {
-    fontSize: 12,
-    fontWeight: '600',
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
-  score: {
-    fontSize: 36,
-    fontWeight: 'bold',
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 });
