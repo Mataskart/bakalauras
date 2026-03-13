@@ -6,7 +6,6 @@ import {
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import client from '../api/client';
-import { removeToken } from '../storage/token';
 
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
@@ -16,7 +15,7 @@ const TEXT = '#e6edf3';
 const MUTED = '#8b949e';
 const DANGER = '#f85149';
 
-export default function HomeScreen({ onLogout }) {
+export default function HomeScreen() {
   const session = useRef(null);
   const [score, setScore] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -40,7 +39,7 @@ export default function HomeScreen({ onLogout }) {
   };
 
   const startTracking = () => {
-    Accelerometer.setUpdateInterval(1000);
+    Accelerometer.setUpdateInterval(100);
     accelSubscription.current = Accelerometer.addListener((data) => {
       accelerometerData.current = data;
     });
@@ -56,16 +55,16 @@ export default function HomeScreen({ onLogout }) {
         const response = await client.post(`/sessions/${session.current.id}/events`, [{
           latitude: locationData.current.latitude,
           longitude: locationData.current.longitude,
-          accelerationX: accelerometerData.current.x,
-          accelerationY: accelerometerData.current.y,
-          accelerationZ: accelerometerData.current.z,
+          accelerationX: accelerometerData.current.x * 9.8,
+          accelerationY: accelerometerData.current.y * 9.8,
+          accelerationZ: accelerometerData.current.z * 9.8,
         }]);
 
         setScore(response.data.currentScore);
       } catch (error) {
         console.log('Event send error:', error.message);
       }
-    }, 5000);
+    }, 2000);
 
     setTracking(true);
   };
@@ -110,12 +109,6 @@ export default function HomeScreen({ onLogout }) {
     }
   };
 
-  const handleLogout = async () => {
-    stopTracking();
-    await removeToken();
-    onLogout();
-  };
-
   const getScoreColor = (s) => {
     if (s >= 80) return '#3fb950';
     if (s >= 50) return '#d29922';
@@ -135,9 +128,6 @@ export default function HomeScreen({ onLogout }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>keliq</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>LOG OUT</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Score display */}
@@ -187,7 +177,7 @@ export default function HomeScreen({ onLogout }) {
               {tracking ? 'STOP' : 'START'}
             </Text>
             <Text style={styles.driveButtonSub}>
-              {tracking ? 'DRIVE' : 'DRIVE'}
+              DRIVE
             </Text>
           </TouchableOpacity>
         )}
@@ -215,12 +205,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: TEXT,
     letterSpacing: -0.5,
-  },
-  logoutText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: MUTED,
-    letterSpacing: 1.5,
   },
   scoreArea: {
     alignItems: 'center',
