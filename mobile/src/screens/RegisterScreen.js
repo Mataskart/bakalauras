@@ -14,25 +14,41 @@ const BORDER = '#30363d';
 const TEXT = '#e6edf3';
 const MUTED = '#8b949e';
 
-export default function LoginScreen({ onLogin, onGoToRegister }) {
+export default function RegisterScreen({ onLogin, onGoToLogin }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [firstNameFocused, setFirstNameFocused] = useState(false);
+  const [lastNameFocused, setLastNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+  const handleRegister = async () => {
+    if (!firstName || !lastName || !email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
     try {
+      // Register the account
+      await client.post('/auth/register', { firstName, lastName, email, password });
+
+      // Auto-login after successful registration
       const response = await client.post('/auth/login', { email, password });
       await saveToken(response.data.token);
       onLogin(response.data.token);
     } catch (error) {
-      Alert.alert('Login failed', 'Invalid email or password');
+      const message = error.response?.data?.error || 'Registration failed';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
@@ -44,27 +60,56 @@ export default function LoginScreen({ onLogin, onGoToRegister }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar barStyle="light-content" backgroundColor={BG} />
-      <ScrollView
-      style={{ backgroundColor: BG }}
-      contentContainerStyle={styles.inner}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      >
+        <ScrollView
+        style={{ backgroundColor: BG }}
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        >
         {/* Logo area */}
         <View style={styles.logoArea}>
           <View style={styles.logoMark}>
             <Text style={styles.logoMarkText}>K</Text>
           </View>
-          <Text style={styles.title}>keliq</Text>
-          <Text style={styles.subtitle}>Drive smart. Score high.</Text>
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>Join keliq and start scoring</Text>
         </View>
 
         {/* Form */}
         <View style={styles.form}>
+          <View style={styles.row}>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>FIRST NAME</Text>
+              <TextInput
+                style={[styles.input, firstNameFocused && styles.inputFocused]}
+                placeholder="Name"
+                placeholderTextColor={MUTED}
+                value={firstName}
+                onChangeText={setFirstName}
+                onFocus={() => setFirstNameFocused(true)}
+                onBlur={() => setFirstNameFocused(false)}
+                autoCorrect={false}
+              />
+            </View>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>LAST NAME</Text>
+              <TextInput
+                style={[styles.input, lastNameFocused && styles.inputFocused]}
+                placeholder="Surname"
+                placeholderTextColor={MUTED}
+                value={lastName}
+                onChangeText={setLastName}
+                onFocus={() => setLastNameFocused(true)}
+                onBlur={() => setLastNameFocused(false)}
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
           <Text style={styles.label}>EMAIL</Text>
           <TextInput
             style={[styles.input, emailFocused && styles.inputFocused]}
-            placeholder="you@example.com"
+            placeholder="email@example.com"
             placeholderTextColor={MUTED}
             value={email}
             onChangeText={setEmail}
@@ -78,7 +123,7 @@ export default function LoginScreen({ onLogin, onGoToRegister }) {
           <Text style={styles.label}>PASSWORD</Text>
           <TextInput
             style={[styles.input, passwordFocused && styles.inputFocused]}
-            placeholder="••••••••"
+            placeholder="•••••••••••••"
             placeholderTextColor={MUTED}
             value={password}
             onChangeText={setPassword}
@@ -91,20 +136,21 @@ export default function LoginScreen({ onLogin, onGoToRegister }) {
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleRegister}
             disabled={loading}
             activeOpacity={0.85}
           >
             {loading
               ? <ActivityIndicator color={TEXT} />
-              : <Text style={styles.buttonText}>LOG IN</Text>
+              : <Text style={styles.buttonText}>CREATE ACCOUNT</Text>
             }
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.registerLink} onPress={onGoToRegister}>
-            <Text style={styles.registerLinkText}>
-              Don't have an account?{' '}
-              <Text style={styles.registerLinkAccent}>Register</Text>
+          {/* Link back to login */}
+          <TouchableOpacity style={styles.loginLink} onPress={onGoToLogin}>
+            <Text style={styles.loginLinkText}>
+              Already have an account?{' '}
+              <Text style={styles.loginLinkAccent}>Log in</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -126,7 +172,7 @@ const styles = StyleSheet.create({
   },
   logoArea: {
     alignItems: 'center',
-    marginBottom: 52,
+    marginBottom: 40,
   },
   logoMark: {
     width: 56,
@@ -144,20 +190,27 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   title: {
-    fontSize: 36,
+    fontSize: 30,
     fontWeight: '800',
     color: TEXT,
-    letterSpacing: -1,
+    letterSpacing: -0.5,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 14,
     color: MUTED,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   form: {
     gap: 6,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
+  },
+  halfField: {
+    flex: 1,
   },
   label: {
     fontSize: 11,
@@ -196,15 +249,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
   },
-  registerLink: {
+  loginLink: {
     alignItems: 'center',
     marginTop: 24,
   },
-  registerLinkText: {
+  loginLinkText: {
     fontSize: 14,
     color: MUTED,
   },
-  registerLinkAccent: {
+  loginLinkAccent: {
     color: ACCENT,
     fontWeight: '700',
   },
