@@ -16,11 +16,10 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "lt.keliq.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
+        "backgroundColor": "#0e1117"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
