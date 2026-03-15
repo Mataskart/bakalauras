@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getToken } from '../storage/token';
+import { getToken, removeToken } from '../storage/token';
 
 const client = axios.create({
   baseURL: 'https://keliq.lt/api',
@@ -8,7 +8,7 @@ const client = axios.create({
   },
 });
 
-// Attach JWT token to every request automatically
+// Attach token to every request
 client.interceptors.request.use(async (config) => {
   const token = await getToken();
   if (token) {
@@ -16,5 +16,23 @@ client.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// On 401 — clear token and call handler
+let _onUnauthorized = null;
+
+export function setUnauthorizedHandler(fn) {
+  _onUnauthorized = fn;
+}
+
+client.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      await removeToken();
+      if (_onUnauthorized) _onUnauthorized();
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default client;

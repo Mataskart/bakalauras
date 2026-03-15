@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { getToken } from './src/storage/token';
+import { setUnauthorizedHandler } from './src/api/client';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -23,6 +24,10 @@ export default function App() {
       setToken(t);
       setLoading(false);
     });
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => setToken(null));
   }, []);
 
   if (loading) {
