@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const [tracking, setTracking] = useState(false);
 
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
+  const peakAccelerometer = useRef({ x: 0, y: 0, z: 0 });
   const locationData = useRef({ latitude: 0, longitude: 0 });
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
@@ -42,6 +43,12 @@ export default function HomeScreen() {
     Accelerometer.setUpdateInterval(100);
     accelSubscription.current = Accelerometer.addListener((data) => {
       accelerometerData.current = data;
+      // Track peak absolute value on each axis within the current 2s window
+      peakAccelerometer.current = {
+        x: Math.abs(data.x) > Math.abs(peakAccelerometer.current.x) ? data.x : peakAccelerometer.current.x,
+        y: Math.abs(data.y) > Math.abs(peakAccelerometer.current.y) ? data.y : peakAccelerometer.current.y,
+        z: Math.abs(data.z) > Math.abs(peakAccelerometer.current.z) ? data.z : peakAccelerometer.current.z,
+      };
     });
 
     intervalRef.current = setInterval(async () => {
@@ -52,13 +59,18 @@ export default function HomeScreen() {
           longitude: location.coords.longitude,
         };
 
+        // Send the peak reading from this window, not just the latest
+        const peak = peakAccelerometer.current;
         const response = await client.post(`/sessions/${session.current.id}/events`, [{
           latitude: locationData.current.latitude,
           longitude: locationData.current.longitude,
-          accelerationX: accelerometerData.current.x * 9.8,
-          accelerationY: accelerometerData.current.y * 9.8,
-          accelerationZ: accelerometerData.current.z * 9.8,
+          accelerationX: peak.x * 9.8,
+          accelerationY: peak.y * 9.8,
+          accelerationZ: peak.z * 9.8,
         }]);
+
+        // Reset peak so the next window starts fresh
+        peakAccelerometer.current = { x: 0, y: 0, z: 0 };
 
         setScore(response.data.currentScore);
       } catch (error) {
@@ -78,6 +90,8 @@ export default function HomeScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    // Reset peak on stop so it doesn't carry over to the next session
+    peakAccelerometer.current = { x: 0, y: 0, z: 0 };
     setTracking(false);
   };
 
@@ -125,12 +139,10 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={BG} />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>keliq</Text>
       </View>
 
-      {/* Score display */}
       <View style={styles.scoreArea}>
         {score !== null ? (
           <>
@@ -155,7 +167,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* Tracking pulse indicator */}
       {tracking && (
         <View style={styles.recordingRow}>
           <View style={styles.recordingDot} />
@@ -163,7 +174,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Main action button */}
       <View style={styles.buttonArea}>
         {loading ? (
           <ActivityIndicator size="large" color={ACCENT} />
