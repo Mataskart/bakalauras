@@ -23,6 +23,7 @@ export default function HomeScreen() {
 
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
   const peakAccelerometer = useRef({ x: 0, y: 0, z: 0 });
+  const gravity = useRef({ x: 0, y: 0, z: 0 });
   const locationData = useRef({ latitude: 0, longitude: 0 });
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
@@ -42,12 +43,29 @@ export default function HomeScreen() {
   const startTracking = () => {
     Accelerometer.setUpdateInterval(100);
     accelSubscription.current = Accelerometer.addListener((data) => {
-      accelerometerData.current = data;
-      // Track peak absolute value on each axis within the current 2s window
+      const alpha = 0.8;
+
+      // Low-pass filter isolates the gravity component
+      gravity.current = {
+        x: alpha * gravity.current.x + (1 - alpha) * data.x,
+        y: alpha * gravity.current.y + (1 - alpha) * data.y,
+        z: alpha * gravity.current.z + (1 - alpha) * data.z,
+      };
+
+      // Subtract gravity to get only motion-induced acceleration
+      const linear = {
+        x: data.x - gravity.current.x,
+        y: data.y - gravity.current.y,
+        z: data.z - gravity.current.z,
+      };
+
+      accelerometerData.current = linear;
+
+      // Track peak linear acceleration within the 2s window
       peakAccelerometer.current = {
-        x: Math.abs(data.x) > Math.abs(peakAccelerometer.current.x) ? data.x : peakAccelerometer.current.x,
-        y: Math.abs(data.y) > Math.abs(peakAccelerometer.current.y) ? data.y : peakAccelerometer.current.y,
-        z: Math.abs(data.z) > Math.abs(peakAccelerometer.current.z) ? data.z : peakAccelerometer.current.z,
+        x: Math.abs(linear.x) > Math.abs(peakAccelerometer.current.x) ? linear.x : peakAccelerometer.current.x,
+        y: Math.abs(linear.y) > Math.abs(peakAccelerometer.current.y) ? linear.y : peakAccelerometer.current.y,
+        z: Math.abs(linear.z) > Math.abs(peakAccelerometer.current.z) ? linear.z : peakAccelerometer.current.z,
       };
     });
 
@@ -90,8 +108,8 @@ export default function HomeScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    // Reset peak on stop so it doesn't carry over to the next session
     peakAccelerometer.current = { x: 0, y: 0, z: 0 };
+    gravity.current = { x: 0, y: 0, z: 0 };
     setTracking(false);
   };
 
