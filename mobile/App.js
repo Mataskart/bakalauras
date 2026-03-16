@@ -3,8 +3,9 @@ import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { getToken } from './src/storage/token';
+import { getToken, removeToken } from './src/storage/token';
 import { setUnauthorizedHandler } from './src/api/client';
+import client from './src/api/client';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -20,14 +21,30 @@ export default function App() {
   const [screen, setScreen] = useState('login');
 
   useEffect(() => {
-    getToken().then((t) => {
-      setToken(t);
-      setLoading(false);
-    });
+    setUnauthorizedHandler(() => setToken(null));
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setToken(null));
+    const bootstrapAuth = async () => {
+      const stored = await getToken();
+      if (!stored) {
+        setLoading(false);
+        return;
+      }
+      // Verify the token is still valid before showing the app
+      try {
+        await client.get('/me');
+        setToken(stored);
+      } catch (e) {
+        // Token exists but is rejected by the server — clear it and show login
+        await removeToken();
+        setToken(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    bootstrapAuth();
   }, []);
 
   if (loading) {
