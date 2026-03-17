@@ -19,6 +19,7 @@ const DANGER = '#f85149';
 export default function HomeScreen() {
   const session = useRef(null);
   const [score, setScore] = useState(null);
+  const [speedLimit, setSpeedLimit] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
 
@@ -99,6 +100,7 @@ export default function HomeScreen() {
         peakAccelerometer.current = { x: 0, y: 0, z: 0 };
 
         setScore(response.data.currentScore);
+        setSpeedLimit(response.data.speedLimitKmh ?? null);
       } catch (error) {
         console.log('Event send error:', error.message);
       }
@@ -129,6 +131,7 @@ export default function HomeScreen() {
       const response = await client.post('/sessions');
       session.current = response.data;
       setScore(null);
+      setSpeedLimit(null);
       await startTracking();
     } catch (error) {
       Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start session');
@@ -140,6 +143,7 @@ export default function HomeScreen() {
   const handleStopSession = async () => {
     setLoading(true);
     stopTracking();
+    setSpeedLimit(null);
     try {
       const response = await client.patch(`/sessions/${session.current.id}/stop`);
       setScore(response.data.score);
@@ -199,6 +203,15 @@ export default function HomeScreen() {
         <View style={styles.recordingRow}>
           <View style={styles.recordingDot} />
           <Text style={styles.recordingText}>RECORDING</Text>
+        </View>
+      )}
+
+      {tracking && (
+        <View style={styles.speedLimitRow}>
+          <Text style={styles.speedLimitLabel}>SPEED LIMIT</Text>
+          <Text style={styles.speedLimitValue}>
+            {speedLimit != null ? `${Math.round(speedLimit)} km/h` : '—'}
+          </Text>
         </View>
       )}
 
@@ -301,6 +314,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: DANGER,
     letterSpacing: 2,
+  },
+  speedLimitRow: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  speedLimitLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  speedLimitValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT,
   },
   buttonArea: {
     flex: 1,

@@ -92,9 +92,14 @@ class EventController extends AbstractController
         $session->setScore($score);
         $em->flush();
 
+        // Current location speed limit for UI (same 2s refresh as events; cache avoids extra lookup when already fetched for event).
+        $last = $eventsData[array_key_last($eventsData)];
+        $speedLimitKmh = $speedLimitService->getSpeedLimitKmh($last['latitude'], $last['longitude']);
+
         return $this->json([
             'received' => count($eventsData),
             'currentScore' => $score,
+            'speedLimitKmh' => $speedLimitKmh,
         ], 201);
     }
 }
