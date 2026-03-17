@@ -28,6 +28,7 @@ jobs:
           script: |
             cd /var/www/bakalauras
             git pull origin main
+            rm -rf web/dist
             mkdir -p web/dist
             cd backend
             composer install --no-dev --optimize-autoloader

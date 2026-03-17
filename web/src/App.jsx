@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Layout from './components/Layout';
@@ -6,8 +7,9 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Contacts from './pages/Contacts';
-import History from './pages/History';
-import Leaderboard from './pages/Leaderboard';
+
+const History = lazy(() => import('./pages/History'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 
 export default function App() {
   return (
@@ -23,7 +25,9 @@ export default function App() {
               path="history"
               element={
                 <ProtectedRoute>
-                  <History />
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading…</div>}>
+                    <History />
+                  </Suspense>
                 </ProtectedRoute>
               }
             />
@@ -31,7 +35,9 @@ export default function App() {
               path="leaderboard"
               element={
                 <ProtectedRoute>
-                  <Leaderboard />
+                  <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading…</div>}>
+                    <Leaderboard />
+                  </Suspense>
                 </ProtectedRoute>
               }
             />

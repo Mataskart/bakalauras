@@ -6,13 +6,14 @@ function formatDate(iso) {
   if (iso == null || iso === '') return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const y = d.getFullYear();
+  const mo = d.getMonth();
+  const day = d.getDate();
+  const h = d.getHours();
+  const min = d.getMinutes();
+  const pad = (n) => String(n).padStart(2, '0');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[mo]} ${day}, ${y}, ${pad(h)}:${pad(min)}`;
 }
 
 function formatDuration(startedAt, endedAt) {
