@@ -6,9 +6,14 @@ use App\Entity\DrivingSession;
 
 // Analyses raw accelerometer data from a driving session and produces
 // a safety score between 0 (worst) and 100 (perfect).
-// Each event is classified and penalised based on acceleration thresholds.
+// Accelerometer X/Y are in the phone frame (orientation-dependent); Z is stored but not scored.
+// Best accuracy when the phone is in a consistent position (e.g. dash mount); pocket/random
+// orientation may spread braking/turn across axes. See class doc for orientation notes.
 class ScoringService
 {
+    // Below this speed (km/h) we consider the vehicle stationary — no penalties (score 100 for that event).
+    private const STATIONARY_SPEED_KMH = 5.0;
+
     // Minimum accelerometer magnitude (m/s²) to classify an event as dangerous
     private const HARD_BRAKE_THRESHOLD = 2.5;       // was 4.0
     private const HARD_ACCELERATION_THRESHOLD = 2.5; // was 3.5
@@ -46,28 +51,36 @@ class ScoringService
         $totalSmoothPenalty = 0.0;
 
         foreach ($events as $event) {
-            $x = $event->getAccelerationX();
-            $y = $event->getAccelerationY();
-
-            // Smooth driving (10–20% weight)
-            if ($y < -self::HARD_BRAKE_THRESHOLD) {
-                $totalSmoothPenalty += self::HARD_BRAKE_PENALTY;
-                $event->setEventType('hard_brake');
-            } elseif ($y > self::HARD_ACCELERATION_THRESHOLD) {
-                $totalSmoothPenalty += self::HARD_ACCELERATION_PENALTY;
-                $event->setEventType('hard_acceleration');
-            } elseif (abs($x) > self::SHARP_TURN_THRESHOLD) {
-                $totalSmoothPenalty += self::SHARP_TURN_PENALTY;
-                $event->setEventType('sharp_turn');
-            } else {
-                $event->setEventType('normal');
-            }
-
-            // Speeding (80% weight)
             $speed = $event->getSpeed();
             $limit = $event->getSpeedLimitKmh();
             $event->setSpeeding(false);
-            if ($speed !== null && $limit !== null && $speed > $limit * self::SPEEDING_TOLERANCE_FACTOR) {
+
+            // Stationary (parked / stopped at light): no penalties — treat as perfect for this event.
+            $stationary = $speed !== null && $speed < self::STATIONARY_SPEED_KMH;
+
+            if ($stationary) {
+                $event->setEventType('normal');
+            } else {
+                $x = $event->getAccelerationX();
+                $y = $event->getAccelerationY();
+
+                // Smooth driving (10–20% weight). X/Y are in phone frame — orientation matters.
+                if ($y < -self::HARD_BRAKE_THRESHOLD) {
+                    $totalSmoothPenalty += self::HARD_BRAKE_PENALTY;
+                    $event->setEventType('hard_brake');
+                } elseif ($y > self::HARD_ACCELERATION_THRESHOLD) {
+                    $totalSmoothPenalty += self::HARD_ACCELERATION_PENALTY;
+                    $event->setEventType('hard_acceleration');
+                } elseif (abs($x) > self::SHARP_TURN_THRESHOLD) {
+                    $totalSmoothPenalty += self::SHARP_TURN_PENALTY;
+                    $event->setEventType('sharp_turn');
+                } else {
+                    $event->setEventType('normal');
+                }
+            }
+
+            // Speeding (80% weight). Not applied when stationary.
+            if (!$stationary && $speed !== null && $limit !== null && $speed > $limit * self::SPEEDING_TOLERANCE_FACTOR) {
                 $totalSpeedingPenalty += self::SPEEDING_PENALTY;
                 $event->setSpeeding(true);
             }

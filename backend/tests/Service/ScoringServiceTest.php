@@ -214,4 +214,18 @@ class ScoringServiceTest extends TestCase
         $this->assertSame('hard_brake', $events[0]->getEventType());
         $this->assertTrue($events[0]->isSpeeding());
     }
+
+    public function testStationaryEventsGetNoPenalty(): void
+    {
+        // Speed 3 km/h = stationary. Even high accelerometer (e.g. phone bump) should not penalise.
+        $session = $this->makeSession([
+            [0.0, -5.2, 9.8, 3.0, 50.0],  // would be hard_brake if moving
+        ]);
+
+        $score = $this->scoring->calculateScore($session);
+        $this->assertSame(100.0, $score);
+        $events = $session->getDrivingEvents()->toArray();
+        $this->assertSame('normal', $events[0]->getEventType());
+        $this->assertFalse($events[0]->isSpeeding());
+    }
 }
