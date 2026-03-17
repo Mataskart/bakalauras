@@ -6,18 +6,21 @@ use App\Entity\DrivingSession;
 
 // Analyses raw accelerometer data from a driving session and produces
 // a safety score between 0 (worst) and 100 (perfect).
-// Accelerometer X/Y are in the phone frame (orientation-dependent); Z is stored but not scored.
-// Best accuracy when the phone is in a consistent position (e.g. dash mount); pocket/random
-// orientation may spread braking/turn across axes. See class doc for orientation notes.
+// Uses magnitude (sqrt(x²+y²+z²)) first so harsh events are caught regardless of phone
+// orientation (pocket, dash, etc.); falls back to X/Y axis rules when magnitude is below threshold.
 class ScoringService
 {
     // Below this speed (km/h) we consider the vehicle stationary — no penalties (score 100 for that event).
     private const STATIONARY_SPEED_KMH = 5.0;
 
-    // Minimum accelerometer magnitude (m/s²) to classify an event as dangerous
-    private const HARD_BRAKE_THRESHOLD = 2.5;       // was 4.0
-    private const HARD_ACCELERATION_THRESHOLD = 2.5; // was 3.5
-    private const SHARP_TURN_THRESHOLD = 2.0;        // was 3.0
+    // Orientation-agnostic: any linear acceleration above this magnitude (m/s²) is penalised as 'harsh'.
+    private const HARSH_MAGNITUDE_THRESHOLD = 2.5;
+    private const HARSH_PENALTY = 25.0;
+
+    // Axis thresholds when magnitude is below harsh threshold (dash/mount use).
+    private const HARD_BRAKE_THRESHOLD = 2.5;
+    private const HARD_ACCELERATION_THRESHOLD = 2.5;
+    private const SHARP_TURN_THRESHOLD = 2.0;
 
     // How many penalty points each dangerous event type contributes.
     // Hard braking is penalised most heavily as it poses the greatest accident risk.
@@ -63,19 +66,28 @@ class ScoringService
             } else {
                 $x = $event->getAccelerationX();
                 $y = $event->getAccelerationY();
+                $z = $event->getAccelerationZ();
 
-                // Smooth driving (10–20% weight). X/Y are in phone frame — orientation matters.
-                if ($y < -self::HARD_BRAKE_THRESHOLD) {
-                    $totalSmoothPenalty += self::HARD_BRAKE_PENALTY;
-                    $event->setEventType('hard_brake');
-                } elseif ($y > self::HARD_ACCELERATION_THRESHOLD) {
-                    $totalSmoothPenalty += self::HARD_ACCELERATION_PENALTY;
-                    $event->setEventType('hard_acceleration');
-                } elseif (abs($x) > self::SHARP_TURN_THRESHOLD) {
-                    $totalSmoothPenalty += self::SHARP_TURN_PENALTY;
-                    $event->setEventType('sharp_turn');
+                // Orientation-agnostic: magnitude catches harsh events in any direction (e.g. phone in pocket).
+                $magnitude = sqrt($x * $x + $y * $y + $z * $z);
+                if ($magnitude >= self::HARSH_MAGNITUDE_THRESHOLD) {
+                    $eventType = $this->eventTypeFromDominantAxis($x, $y, $z);
+                    $event->setEventType($eventType);
+                    $totalSmoothPenalty += $this->penaltyForEventType($eventType);
                 } else {
-                    $event->setEventType('normal');
+                    // Axis-based classification when magnitude is below threshold (dash/mount).
+                    if ($y < -self::HARD_BRAKE_THRESHOLD) {
+                        $totalSmoothPenalty += self::HARD_BRAKE_PENALTY;
+                        $event->setEventType('hard_brake');
+                    } elseif ($y > self::HARD_ACCELERATION_THRESHOLD) {
+                        $totalSmoothPenalty += self::HARD_ACCELERATION_PENALTY;
+                        $event->setEventType('hard_acceleration');
+                    } elseif (abs($x) > self::SHARP_TURN_THRESHOLD) {
+                        $totalSmoothPenalty += self::SHARP_TURN_PENALTY;
+                        $event->setEventType('sharp_turn');
+                    } else {
+                        $event->setEventType('normal');
+                    }
                 }
             }
 
@@ -96,5 +108,33 @@ class ScoringService
         $score = self::SPEED_WEIGHT * $speedScore + self::SMOOTH_WEIGHT * $smoothScore;
 
         return round($score, 2);
+    }
+
+    /**
+     * When magnitude is high, infer event type from dominant axis for analytics.
+     * If Z dominates (e.g. phone in pocket), return 'harsh'.
+     */
+    private function eventTypeFromDominantAxis(float $x, float $y, float $z): string
+    {
+        $ax = abs($x);
+        $ay = abs($y);
+        $az = abs($z);
+        if ($az >= $ax && $az >= $ay) {
+            return 'harsh';
+        }
+        if ($ay >= $ax) {
+            return $y < 0 ? 'hard_brake' : 'hard_acceleration';
+        }
+        return 'sharp_turn';
+    }
+
+    private function penaltyForEventType(string $eventType): float
+    {
+        return match ($eventType) {
+            'hard_brake' => self::HARD_BRAKE_PENALTY,
+            'hard_acceleration' => self::HARD_ACCELERATION_PENALTY,
+            'sharp_turn', 'harsh' => self::HARSH_PENALTY,
+            default => 0.0,
+        };
     }
 }

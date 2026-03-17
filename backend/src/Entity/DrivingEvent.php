@@ -39,7 +39,7 @@ class DrivingEvent
     private ?float $accelerationZ = null;
 
     // Classified by the scoring algorithm after analysis:
-    // 'normal', 'hard_brake', 'hard_acceleration', 'sharp_turn'
+    // 'normal', 'hard_brake', 'hard_acceleration', 'sharp_turn', 'harsh' (Z-dominant / orientation-agnostic)
     // Null until the scoring service processes this event
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $eventType = null;

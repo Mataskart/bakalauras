@@ -62,11 +62,11 @@ class ScoringServiceTest extends TestCase
 
     public function testPerfectScoreWithAllNormalEvents(): void
     {
-        // All readings well below any threshold
+        // All readings well below magnitude (2.5) and axis thresholds; z=0 so magnitude ~0.1–0.3
         $session = $this->makeSession([
-            [0.1, 0.2, 9.8],
-            [0.0, 0.1, 9.8],
-            [0.2, 0.3, 9.8],
+            [0.1, 0.2, 0.0],
+            [0.0, 0.1, 0.0],
+            [0.2, 0.3, 0.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -75,9 +75,9 @@ class ScoringServiceTest extends TestCase
 
     public function testHardBrakeReducesScore(): void
     {
-        // Y = -5.2 exceeds the hard brake threshold of -4.0
+        // Magnitude 5.2 >= 2.5, Y dominant → hard_brake (z=0 so axis is clear)
         $session = $this->makeSession([
-            [0.0, -5.2, 9.8],
+            [0.0, -5.2, 0.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -86,9 +86,9 @@ class ScoringServiceTest extends TestCase
 
     public function testHardAccelerationReducesScore(): void
     {
-        // Y = 4.0 exceeds the hard acceleration threshold of 3.5
+        // Magnitude 4 >= 2.5, Y dominant → hard_acceleration
         $session = $this->makeSession([
-            [0.0, 4.0, 9.8],
+            [0.0, 4.0, 0.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -97,9 +97,9 @@ class ScoringServiceTest extends TestCase
 
     public function testSharpTurnReducesScore(): void
     {
-        // X = 3.5 exceeds the sharp turn threshold of 3.0
+        // Magnitude 3.5 >= 2.5, X dominant → sharp_turn
         $session = $this->makeSession([
-            [3.5, 0.0, 9.8],
+            [3.5, 0.0, 0.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -110,11 +110,11 @@ class ScoringServiceTest extends TestCase
     {
         // Many severe hard brakes should floor the score at 0, not go negative
         $session = $this->makeSession([
-            [0.0, -20.0, 9.8],
-            [0.0, -20.0, 9.8],
-            [0.0, -20.0, 9.8],
-            [0.0, -20.0, 9.8],
-            [0.0, -20.0, 9.8],
+            [0.0, -20.0, 0.0],
+            [0.0, -20.0, 0.0],
+            [0.0, -20.0, 0.0],
+            [0.0, -20.0, 0.0],
+            [0.0, -20.0, 0.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -123,11 +123,12 @@ class ScoringServiceTest extends TestCase
 
     public function testEventTypesAreClassifiedCorrectly(): void
     {
+        // z=0 so magnitude path still yields axis-derived types; last event below magnitude threshold
         $session = $this->makeSession([
-            [0.0, -5.2, 9.8],  // hard brake
-            [0.0, 4.0,  9.8],  // hard acceleration
-            [3.5, 0.0,  9.8],  // sharp turn
-            [0.1, 0.1,  9.8],  // normal
+            [0.0, -5.2, 0.0],  // hard brake (magnitude 5.2, Y dominant)
+            [0.0, 4.0,  0.0],  // hard acceleration
+            [3.5, 0.0,  0.0],  // sharp turn
+            [0.1, 0.1,  0.0],  // normal (magnitude ~0.14 < 2.5)
         ]);
 
         $this->scoring->calculateScore($session);
@@ -139,12 +140,25 @@ class ScoringServiceTest extends TestCase
         $this->assertSame('normal', $events[3]->getEventType());
     }
 
+    public function testMagnitudeOnlyOnZIsClassifiedAsHarsh(): void
+    {
+        // Phone in pocket: jerk mostly on Z. Magnitude 3 >= 2.5, Z dominant → 'harsh'
+        $session = $this->makeSession([
+            [0.0, 0.0, 3.0],
+        ]);
+
+        $score = $this->scoring->calculateScore($session);
+        $events = $session->getDrivingEvents()->toArray();
+        $this->assertSame('harsh', $events[0]->getEventType());
+        $this->assertLessThan(100.0, $score);
+    }
+
     public function testMixedSessionScoreIsBetweenZeroAndHundred(): void
     {
         $session = $this->makeSession([
-            [0.0, -5.2, 9.8],  // hard brake
-            [0.1, 0.2,  9.8],  // normal
-            [0.0, 0.1,  9.8],  // normal
+            [0.0, -5.2, 0.0],  // hard brake
+            [0.1, 0.2,  0.0],  // normal
+            [0.0, 0.1,  0.0],  // normal
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -156,7 +170,7 @@ class ScoringServiceTest extends TestCase
     {
         // Normal acceleration but speed 60 km/h where limit is 50 (80% weight)
         $session = $this->makeSession([
-            [0.1, 0.2, 9.8, 60.0, 50.0],
+            [0.1, 0.2, 0.0, 60.0, 50.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -168,8 +182,8 @@ class ScoringServiceTest extends TestCase
     public function testSpeedAtOrBelowLimitDoesNotPenalise(): void
     {
         $session = $this->makeSession([
-            [0.1, 0.2, 9.8, 50.0, 50.0],  // at limit
-            [0.1, 0.2, 9.8, 40.0, 50.0],  // below limit
+            [0.1, 0.2, 0.0, 50.0, 50.0],  // at limit
+            [0.1, 0.2, 0.0, 40.0, 50.0],  // below limit
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -183,7 +197,7 @@ class ScoringServiceTest extends TestCase
     {
         // 52.5 km/h with limit 50: 52.5 <= 50 * 1.05 = 52.5, so no penalty
         $session = $this->makeSession([
-            [0.1, 0.2, 9.8, 52.5, 50.0],
+            [0.1, 0.2, 0.0, 52.5, 50.0],
         ]);
         $score = $this->scoring->calculateScore($session);
         $this->assertSame(100.0, $score);
@@ -194,7 +208,7 @@ class ScoringServiceTest extends TestCase
     {
         // 53 km/h with limit 50: over 52.5, so speeding
         $session = $this->makeSession([
-            [0.1, 0.2, 9.8, 53.0, 50.0],
+            [0.1, 0.2, 0.0, 53.0, 50.0],
         ]);
         $score = $this->scoring->calculateScore($session);
         $this->assertLessThan(100.0, $score);
@@ -203,9 +217,9 @@ class ScoringServiceTest extends TestCase
 
     public function testSpeedingAndAccelerationPenaltiesStack(): void
     {
-        // One event: hard brake and speeding (80% speed + 20% smooth)
+        // One event: hard brake (Y dominant, z=0) and speeding
         $session = $this->makeSession([
-            [0.0, -5.2, 9.8, 70.0, 50.0],
+            [0.0, -5.2, 0.0, 70.0, 50.0],
         ]);
 
         $score = $this->scoring->calculateScore($session);
@@ -219,7 +233,7 @@ class ScoringServiceTest extends TestCase
     {
         // Speed 3 km/h = stationary. Even high accelerometer (e.g. phone bump) should not penalise.
         $session = $this->makeSession([
-            [0.0, -5.2, 9.8, 3.0, 50.0],  // would be hard_brake if moving
+            [0.0, -5.2, 0.0, 3.0, 50.0],  // would be hard_brake if moving
         ]);
 
         $score = $this->scoring->calculateScore($session);
