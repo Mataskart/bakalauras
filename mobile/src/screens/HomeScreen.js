@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, StatusBar
+  Alert, ActivityIndicator, StatusBar, AppState
 } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
@@ -20,7 +20,10 @@ import {
   stopBackgroundUpdates,
   isBackgroundRecording,
   completeCurrentDriveAndStop,
+  pauseBackgroundRecording,
+  resumeBackgroundRecording,
 } from '../backgroundLocation';
+import { getAutoDetect, setAutoDetect as persistAutoDetect } from '../storage/autoDetect';
 
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
@@ -38,6 +41,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [autoDetect, setAutoDetect] = useState(false);
+  const [autoDetectLoaded, setAutoDetectLoaded] = useState(false);
 
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
   const peakAccelerometer = useRef({ x: 0, y: 0, z: 0 });
@@ -45,6 +49,13 @@ export default function HomeScreen() {
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
   const autoCompleteCheckRef = useRef(null);
+
+  useEffect(() => {
+    getAutoDetect().then((v) => {
+      setAutoDetect(v);
+      setAutoDetectLoaded(true);
+    });
+  }, []);
 
   useEffect(() => {
     requestPermissions();
@@ -141,6 +152,25 @@ export default function HomeScreen() {
     setTracking(false);
   };
 
+  const stopTrackingSilent = () => {
+    if (accelSubscription.current) {
+      accelSubscription.current.remove();
+      accelSubscription.current = null;
+    }
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    peakAccelerometer.current = { x: 0, y: 0, z: 0 };
+    gravity.current = { x: 0, y: 0, z: 0 };
+    deactivateKeepAwake();
+  };
+
+  const takeOverWithAccel = async () => {
+    await pauseBackgroundRecording();
+    startTracking();
+  };
+
   const uploadBufferAndStop = async (trimmed) => {
     const result = await uploadDriveAndClear(trimmed);
     setScore(result?.score ?? null);
@@ -195,22 +225,44 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    if (!autoDetectLoaded) return;
     if (!autoDetect) {
       stopBackgroundUpdates();
       return;
     }
     startBackgroundWatching();
     return () => { stopBackgroundUpdates(); };
-  }, [autoDetect]);
+  }, [autoDetect, autoDetectLoaded]);
 
   useEffect(() => {
-    if (!autoDetect || tracking || loading) return;
+    if (!autoDetect || loading) return;
     const t = setInterval(async () => {
       const recording = await isBackgroundRecording();
-      if (recording) setTracking(true);
+      if (recording) {
+        setTracking(true);
+        if (!intervalRef.current) takeOverWithAccel();
+      }
     }, 2000);
     return () => clearInterval(t);
-  }, [autoDetect, tracking, loading]);
+  }, [autoDetect, loading]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' && intervalRef.current) {
+        stopTrackingSilent();
+        resumeBackgroundRecording();
+      }
+      if (nextAppState === 'active') {
+        isBackgroundRecording().then((recording) => {
+          if (recording && !intervalRef.current) {
+            setTracking(true);
+            takeOverWithAccel();
+          }
+        });
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const getScoreColor = (s) => {
     if (s >= 80) return '#3fb950';
@@ -233,7 +285,11 @@ export default function HomeScreen() {
         {!tracking && (
           <TouchableOpacity
             style={[styles.autoToggle, autoDetect && styles.autoToggleOn]}
-            onPress={() => setAutoDetect((a) => !a)}
+            onPress={async () => {
+              const next = !autoDetect;
+              setAutoDetect(next);
+              await persistAutoDetect(next);
+            }}
           >
             <Text style={styles.autoToggleText}>
               {autoDetect ? 'Auto on' : 'Auto off'}

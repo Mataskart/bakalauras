@@ -1,4 +1,5 @@
 import './src/backgroundLocation';
+import './src/dailySummary';
 import { registerRootComponent } from 'expo';
 
 import App from './App';

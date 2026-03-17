@@ -49,7 +49,7 @@ async function showRecordingNotification() {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: 'keliq',
-        body: 'Recording drive — tap to open',
+        body: 'Drive recording started',
         data: {},
         channelId: RECORDING_CHANNEL_ID,
       },
@@ -206,4 +206,33 @@ export async function completeCurrentDriveAndStop() {
     distanceInterval: 0,
   });
   return result;
+}
+
+const recordOpts = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: RECORD_INTERVAL_MS,
+  distanceInterval: 0,
+  foregroundService: {
+    notificationTitle: 'keliq',
+    notificationBody: 'Recording drive',
+    notificationColor: '#007ACC',
+  },
+};
+
+/** Pause background location updates so the app can take over (e.g. with accelerometer). */
+export async function pauseBackgroundRecording() {
+  try {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+  } catch (_) {}
+}
+
+/** Resume background location updates (e.g. when app goes to background). */
+export async function resumeBackgroundRecording() {
+  const mode = await getMode();
+  if (mode !== MODE_RECORD) return;
+  try {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, recordOpts);
+  } catch (e) {
+    console.warn('Resume record updates failed:', e.message);
+  }
 }

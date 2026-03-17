@@ -11,8 +11,7 @@ Notifications.setNotificationHandler({
 const DAILY_CHANNEL_ID = 'keliq-daily';
 
 /**
- * Request permission and set up the daily reminder channel (Android).
- * Call once after login or on app load when user is logged in.
+ * Request permission and set up channels. Call once after login.
  */
 export async function setupDailyNotification() {
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -24,39 +23,53 @@ export async function setupDailyNotification() {
   if (status !== 'granted') return;
 
   await Notifications.setNotificationChannelAsync(DAILY_CHANNEL_ID, {
-    name: 'Daily reminder',
+    name: 'Daily summary',
     importance: Notifications.AndroidImportance.DEFAULT,
   });
 }
 
 /**
- * Schedule a daily local notification (e.g. 8:00 AM).
- * @param {Object} opts
- * @param {number} [opts.hour=8]
- * @param {number} [opts.minute=0]
+ * Schedule only the daily 21:00 summary. No other daily reminder.
+ * The actual body (today's average score) is set when the 21:00 job runs (see dailySummary.js).
  */
-export async function scheduleDailyReminder({ hour = 8, minute = 0 } = {}) {
+export async function scheduleDailySummaryAt21() {
   await Notifications.cancelAllScheduledNotificationsAsync();
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'keliq',
-      body: 'Drive safe today — open keliq to track your drive.',
-      data: {},
-      channelId: DAILY_CHANNEL_ID,
-    },
-    trigger: {
-      hour,
-      minute,
-      repeats: true,
-      channelId: DAILY_CHANNEL_ID,
-    },
-  });
+  // We don't schedule a static notification here; the 21:00 summary is sent by the background task
+  // after fetching today's stats. So nothing to schedule for daily summary.
 }
 
 /**
- * Cancel the daily reminder.
+ * Cancel all scheduled notifications (e.g. if user disables).
  */
 export async function cancelDailyReminder() {
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+/**
+ * Show the daily summary notification (called by background task at 21:00 after fetching stats).
+ * @param {{ averageScore: number | null, driveCount: number }} stats
+ */
+export async function showDailySummaryNotification(stats) {
+  const { averageScore, driveCount } = stats;
+  let body;
+  if (driveCount === 0) {
+    body = "No drives today.";
+  } else if (averageScore != null) {
+    body = `Today's average driving score: ${Math.round(averageScore)} (${driveCount} drive${driveCount !== 1 ? 's' : ''})`;
+  } else {
+    body = `${driveCount} drive${driveCount !== 1 ? 's' : ''} today.`;
+  }
+  await Notifications.setNotificationChannelAsync(DAILY_CHANNEL_ID, {
+    name: 'Daily summary',
+    importance: Notifications.AndroidImportance.DEFAULT,
+  });
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'keliq',
+      body,
+      data: {},
+      channelId: DAILY_CHANNEL_ID,
+    },
+    trigger: null,
+  });
 }
