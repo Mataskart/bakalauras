@@ -52,22 +52,26 @@ export default function HomeScreen() {
   const autoCompleteCheckRef = useRef(null);
 
   useEffect(() => {
-    getAutoDetect().then((v) => {
-      setAutoDetect(v);
-      setAutoDetectLoaded(true);
-    });
+    getAutoDetect()
+      .then((v) => {
+        setAutoDetect(!!v);
+        setAutoDetectLoaded(true);
+      })
+      .catch(() => setAutoDetectLoaded(true));
   }, []);
 
   useEffect(() => {
-    requestPermissions();
+    requestPermissions().catch(() => {});
     return () => stopTracking();
   }, []);
 
   const requestPermissions = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Location access is needed to track your drive.');
-    }
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Location access is needed to track your drive.');
+      }
+    } catch (_) {}
   };
 
   const pushOneEvent = async (location, peak) => {
@@ -228,47 +232,65 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!autoDetectLoaded) return;
     if (!autoDetect) {
-      stopBackgroundUpdates();
+      stopBackgroundUpdates().catch(() => {});
       return;
     }
-    (async () => {
-      const started = await startBackgroundWatching();
-      if (!started) {
-        setAutoDetect(false);
-        await persistAutoDetect(false);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const started = await startBackgroundWatching();
+        if (!cancelled && !started) {
+          setAutoDetect(false);
+          await persistAutoDetect(false);
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setAutoDetect(false);
+          persistAutoDetect(false).catch(() => {});
+        }
       }
-    })();
-    return () => { stopBackgroundUpdates(); };
+    }, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      stopBackgroundUpdates().catch(() => {});
+    };
   }, [autoDetect, autoDetectLoaded]);
 
   useEffect(() => {
     if (!autoDetect || loading) return;
     const t = setInterval(async () => {
-      const recording = await isBackgroundRecording();
-      if (recording) {
-        setTracking(true);
-        if (!intervalRef.current) takeOverWithAccel();
-      }
+      try {
+        const recording = await isBackgroundRecording();
+        if (recording) {
+          setTracking(true);
+          if (!intervalRef.current) takeOverWithAccel();
+        }
+      } catch (_) {}
     }, 2000);
     return () => clearInterval(t);
   }, [autoDetect, loading]);
 
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'background' && intervalRef.current) {
-        stopTrackingSilent();
-        resumeBackgroundRecording();
-      }
-      if (nextAppState === 'active') {
-        isBackgroundRecording().then((recording) => {
-          if (recording && !intervalRef.current) {
-            setTracking(true);
-            takeOverWithAccel();
-          }
-        });
-      }
-    });
-    return () => sub.remove();
+    try {
+      const sub = AppState.addEventListener('change', (nextAppState) => {
+        if (nextAppState === 'background' && intervalRef.current) {
+          stopTrackingSilent();
+          resumeBackgroundRecording().catch(() => {});
+        }
+        if (nextAppState === 'active') {
+          isBackgroundRecording().then((recording) => {
+            if (recording && !intervalRef.current) {
+              setTracking(true);
+              takeOverWithAccel().catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      });
+      return () => sub.remove();
+    } catch (_) {
+      return () => {};
+    }
   }, []);
 
   const getScoreColor = (s) => {
@@ -311,7 +333,7 @@ export default function HomeScreen() {
                       if (granted) {
                         setAutoDetect(true);
                         await persistAutoDetect(true);
-                        startBackgroundWatching();
+                        startBackgroundWatching().catch(() => {});
                         return;
                       }
                       await Linking.openSettings();

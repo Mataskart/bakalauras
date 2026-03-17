@@ -37,8 +37,11 @@ export default function App() {
       try {
         await client.get('/me');
         setToken(stored);
-        await scheduleDailySummaryAt21();
-        await registerDailySummaryTask();
+        try {
+          await scheduleDailySummaryAt21();
+          await registerDailySummaryTask();
+          await setupDailyNotification();
+        } catch (_) {}
       } catch (e) {
         // Token exists but is rejected by the server — clear it and show login
         await removeToken();
@@ -70,15 +73,6 @@ export default function App() {
           onGoToLogin={() => setScreen('login')}
         />;
   }
-
-  useEffect(() => {
-    if (!token) return;
-    const t = setTimeout(async () => {
-      const { setupDailyNotification } = await import('./src/notifications');
-      await setupDailyNotification();
-    }, 500);
-    return () => clearTimeout(t);
-  }, [token]);
 
   return (
     <NavigationContainer>

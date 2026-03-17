@@ -170,22 +170,25 @@ export async function requestBackgroundLocationPermission() {
 }
 
 export async function startBackgroundWatching() {
-  const fg = await Location.getForegroundPermissionsAsync();
-  if (fg.status !== 'granted') return false;
-  const bg = await Location.getBackgroundPermissionsAsync();
-  if (bg.status !== 'granted') return false;
-
-  const mode = await getMode();
   try {
-    await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-  } catch (_) {}
-  await setMode(MODE_WATCH);
-  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-    accuracy: Location.Accuracy.Balanced,
-    timeInterval: WATCH_INTERVAL_MS,
-    distanceInterval: 0,
-  });
-  return true;
+    const fg = await Location.getForegroundPermissionsAsync();
+    if (fg.status !== 'granted') return false;
+    const bg = await Location.getBackgroundPermissionsAsync();
+    if (bg.status !== 'granted') return false;
+
+    try {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    } catch (_) {}
+    await setMode(MODE_WATCH);
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: WATCH_INTERVAL_MS,
+      distanceInterval: 0,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 export async function stopBackgroundUpdates() {

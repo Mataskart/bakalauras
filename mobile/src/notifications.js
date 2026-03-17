@@ -15,23 +15,28 @@ const DAILY_CHANNEL_ID = 'keliq-daily';
  * Returns true if granted.
  */
 export async function requestNotificationPermission() {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status: requested } = await Notifications.requestPermissionsAsync();
-  return requested === 'granted';
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+    const { status: requested } = await Notifications.requestPermissionsAsync();
+    return requested === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Set up channels and ensure permission. Call once after login.
  */
 export async function setupDailyNotification() {
-  const granted = await requestNotificationPermission();
-  if (!granted) return;
-
-  await Notifications.setNotificationChannelAsync(DAILY_CHANNEL_ID, {
-    name: 'Daily summary',
-    importance: Notifications.AndroidImportance.DEFAULT,
-  });
+  try {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+    await Notifications.setNotificationChannelAsync(DAILY_CHANNEL_ID, {
+      name: 'Daily summary',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  } catch (_) {}
 }
 
 /**
@@ -39,7 +44,9 @@ export async function setupDailyNotification() {
  * The actual body (today's average score) is set when the 21:00 job runs (see dailySummary.js).
  */
 export async function scheduleDailySummaryAt21() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (_) {}
   // We don't schedule a static notification here; the 21:00 summary is sent by the background task
   // after fetching today's stats. So nothing to schedule for daily summary.
 }
