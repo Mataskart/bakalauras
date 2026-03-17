@@ -14,6 +14,13 @@ import {
   trimStationaryTail,
   hasBeenStationaryFor15Min,
 } from '../driveBuffer';
+import { uploadDriveAndClear } from '../uploadDrive';
+import {
+  startBackgroundWatching,
+  stopBackgroundUpdates,
+  isBackgroundRecording,
+  completeCurrentDriveAndStop,
+} from '../backgroundLocation';
 
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
@@ -23,8 +30,6 @@ const TEXT = '#e6edf3';
 const MUTED = '#8b949e';
 const DANGER = '#f85149';
 
-const DRIVING_START_KMH = 10;
-const DRIVING_START_SECONDS = 5;
 const BATCH_SIZE = 50;
 
 export default function HomeScreen() {
@@ -39,9 +44,7 @@ export default function HomeScreen() {
   const gravity = useRef({ x: 0, y: 0, z: 0 });
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
-  const autoStartCheckRef = useRef(null);
   const autoCompleteCheckRef = useRef(null);
-  const drivingStartCountdownRef = useRef(0);
 
   useEffect(() => {
     requestPermissions();
@@ -128,10 +131,6 @@ export default function HomeScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (autoStartCheckRef.current) {
-      clearInterval(autoStartCheckRef.current);
-      autoStartCheckRef.current = null;
-    }
     if (autoCompleteCheckRef.current) {
       clearInterval(autoCompleteCheckRef.current);
       autoCompleteCheckRef.current = null;
@@ -143,37 +142,9 @@ export default function HomeScreen() {
   };
 
   const uploadBufferAndStop = async (trimmed) => {
-    if (trimmed.length === 0) {
-      await clearBuffer();
-      setScore(null);
-      setSpeedLimit(null);
-      return;
-    }
-    const startedAt = trimmed[0].recordedAt;
-    const endedAt = trimmed[trimmed.length - 1].recordedAt;
-
-    const sessionRes = await client.post('/sessions', { startedAt });
-    const sessionId = sessionRes.data.id;
-
-    for (let i = 0; i < trimmed.length; i += BATCH_SIZE) {
-      const batch = trimmed.slice(i, i + BATCH_SIZE);
-      const payload = batch.map((e) => ({
-        latitude: e.latitude,
-        longitude: e.longitude,
-        accelerationX: e.accelerationX,
-        accelerationY: e.accelerationY,
-        accelerationZ: e.accelerationZ,
-        recordedAt: e.recordedAt,
-        ...(e.speed !== undefined && { speed: e.speed }),
-      }));
-      const eventRes = await client.post(`/sessions/${sessionId}/events`, payload);
-      if (eventRes.data.speedLimitKmh != null) setSpeedLimit(eventRes.data.speedLimitKmh);
-    }
-
-    const stopRes = await client.patch(`/sessions/${sessionId}/stop`, { endedAt });
-    setScore(stopRes.data.score);
+    const result = await uploadDriveAndClear(trimmed);
+    setScore(result?.score ?? null);
     setSpeedLimit(null);
-    await clearBuffer();
   };
 
   const handleCompleteDrive = async () => {
@@ -206,38 +177,40 @@ export default function HomeScreen() {
   };
 
   const handleStopSession = async () => {
+    const fromBackground = await isBackgroundRecording();
+    if (fromBackground) {
+      setLoading(true);
+      try {
+        const result = await completeCurrentDriveAndStop();
+        setScore(result?.score ?? null);
+        setTracking(false);
+      } catch (e) {
+        Alert.alert('Error', 'Could not save drive');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     await handleCompleteDrive();
   };
 
   useEffect(() => {
-    if (!autoDetect || tracking) return;
-    autoStartCheckRef.current = setInterval(async () => {
-      try {
-        const location = await Location.getCurrentPositionAsync({});
-        const speedMs = location.coords.speed;
-        const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
-        if (speedKmh >= DRIVING_START_KMH) {
-          drivingStartCountdownRef.current += 1;
-          if (drivingStartCountdownRef.current >= Math.ceil(DRIVING_START_SECONDS / 2)) {
-            drivingStartCountdownRef.current = 0;
-            if (autoStartCheckRef.current) {
-              clearInterval(autoStartCheckRef.current);
-              autoStartCheckRef.current = null;
-            }
-            await handleStartSession();
-          }
-        } else {
-          drivingStartCountdownRef.current = 0;
-        }
-      } catch (_) {}
+    if (!autoDetect) {
+      stopBackgroundUpdates();
+      return;
+    }
+    startBackgroundWatching();
+    return () => { stopBackgroundUpdates(); };
+  }, [autoDetect]);
+
+  useEffect(() => {
+    if (!autoDetect || tracking || loading) return;
+    const t = setInterval(async () => {
+      const recording = await isBackgroundRecording();
+      if (recording) setTracking(true);
     }, 2000);
-    return () => {
-      if (autoStartCheckRef.current) {
-        clearInterval(autoStartCheckRef.current);
-        autoStartCheckRef.current = null;
-      }
-    };
-  }, [autoDetect, tracking]);
+    return () => clearInterval(t);
+  }, [autoDetect, tracking, loading]);
 
   const getScoreColor = (s) => {
     if (s >= 80) return '#3fb950';
@@ -287,7 +260,7 @@ export default function HomeScreen() {
             <Text style={styles.scoreLabel}>DRIVE SCORE</Text>
             <Text style={styles.scorePlaceholder}>—</Text>
             <Text style={styles.scoreHint}>
-              {tracking ? 'Recording… Save when you stop' : (autoDetect ? 'Auto: drive will start when moving' : 'Start a drive to see your score')}
+              {tracking ? 'Recording… Save when you stop' : (autoDetect ? 'Auto: checking every few min when not driving' : 'Start a drive to see your score')}
             </Text>
           </>
         )}
