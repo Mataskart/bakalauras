@@ -152,14 +152,29 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
 });
 
-export async function startBackgroundWatching() {
-  const hasPermission = await Location.getForegroundPermissionsAsync();
-  if (hasPermission.status !== 'granted') return;
-  const bg = await Location.getBackgroundPermissionsAsync();
-  if (bg.status !== 'granted') {
-    const { status } = await Location.requestBackgroundPermissionsAsync();
-    if (status !== 'granted') return;
+/**
+ * Request background location permission. Call when user enables Auto.
+ * On Android 11+ this may open system settings; explain to the user first.
+ * @returns {Promise<boolean>} true if background (or foreground-only) allowed so we can proceed
+ */
+export async function requestBackgroundLocationPermission() {
+  const fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status !== 'granted') {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return false;
   }
+  const bg = await Location.getBackgroundPermissionsAsync();
+  if (bg.status === 'granted') return true;
+  const { status } = await Location.requestBackgroundPermissionsAsync();
+  return status === 'granted';
+}
+
+export async function startBackgroundWatching() {
+  const fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status !== 'granted') return false;
+  const bg = await Location.getBackgroundPermissionsAsync();
+  if (bg.status !== 'granted') return false;
+
   const mode = await getMode();
   try {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
@@ -170,6 +185,7 @@ export async function startBackgroundWatching() {
     timeInterval: WATCH_INTERVAL_MS,
     distanceInterval: 0,
   });
+  return true;
 }
 
 export async function stopBackgroundUpdates() {

@@ -22,6 +22,7 @@ import {
   completeCurrentDriveAndStop,
   pauseBackgroundRecording,
   resumeBackgroundRecording,
+  requestBackgroundLocationPermission,
 } from '../backgroundLocation';
 import { getAutoDetect, setAutoDetect as persistAutoDetect } from '../storage/autoDetect';
 
@@ -230,7 +231,13 @@ export default function HomeScreen() {
       stopBackgroundUpdates();
       return;
     }
-    startBackgroundWatching();
+    (async () => {
+      const started = await startBackgroundWatching();
+      if (!started) {
+        setAutoDetect(false);
+        await persistAutoDetect(false);
+      }
+    })();
     return () => { stopBackgroundUpdates(); };
   }, [autoDetect, autoDetectLoaded]);
 
@@ -286,9 +293,35 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[styles.autoToggle, autoDetect && styles.autoToggleOn]}
             onPress={async () => {
-              const next = !autoDetect;
-              setAutoDetect(next);
-              await persistAutoDetect(next);
+              if (autoDetect) {
+                setAutoDetect(false);
+                await persistAutoDetect(false);
+                stopBackgroundUpdates();
+                return;
+              }
+              Alert.alert(
+                'Background location',
+                'Auto mode checks your location every few minutes to detect when you start driving, then records the drive. This requires "Allow all the time" (background) location access.\n\nYou can change this later in system settings.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Continue',
+                    onPress: async () => {
+                      const granted = await requestBackgroundLocationPermission();
+                      if (!granted) {
+                        Alert.alert(
+                          'Permission needed',
+                          'Background location is required for Auto mode. Please allow "All the time" in settings, then enable Auto again.'
+                        );
+                        return;
+                      }
+                      setAutoDetect(true);
+                      await persistAutoDetect(true);
+                      startBackgroundWatching();
+                    },
+                  },
+                ]
+              );
             }}
           >
             <Text style={styles.autoToggleText}>
