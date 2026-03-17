@@ -61,7 +61,15 @@ class EventController extends AbstractController
 
             $event = new DrivingEvent();
             $event->setSession($session);
-            $event->setRecordedAt(new \DateTimeImmutable());
+            if (!empty($eventData['recordedAt'])) {
+                try {
+                    $event->setRecordedAt(new \DateTimeImmutable($eventData['recordedAt']));
+                } catch (\Throwable) {
+                    $event->setRecordedAt(new \DateTimeImmutable());
+                }
+            } else {
+                $event->setRecordedAt(new \DateTimeImmutable());
+            }
             $event->setLatitude($eventData['latitude']);
             $event->setLongitude($eventData['longitude']);
             $event->setAccelerationX($eventData['accelerationX']);

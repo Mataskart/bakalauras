@@ -21,15 +21,25 @@ class SessionController extends AbstractController
         private readonly CacheItemPoolInterface $leaderboardCache
     ) {
     }
-    // POST /api/sessions — starts a new active driving session for the logged-in user
+    // POST /api/sessions — starts a new active driving session for the logged-in user.
+    // Optional body: { "startedAt": "ISO8601" } for offline/buffered drives (client-provided start time).
     #[Route('', name: 'api_sessions_start', methods: ['POST'])]
-    public function start(EntityManagerInterface $em): JsonResponse
+    public function start(Request $request, EntityManagerInterface $em): JsonResponse
     {
         $user = $this->getUser();
 
         $session = new DrivingSession();
         $session->setDriver($user);
-        $session->setStartedAt(new \DateTimeImmutable());
+        $body = json_decode($request->getContent(), true) ?: [];
+        if (!empty($body['startedAt'])) {
+            try {
+                $session->setStartedAt(new \DateTimeImmutable($body['startedAt']));
+            } catch (\Throwable) {
+                $session->setStartedAt(new \DateTimeImmutable());
+            }
+        } else {
+            $session->setStartedAt(new \DateTimeImmutable());
+        }
         $session->setStatus('active');
 
         $em->persist($session);
@@ -43,9 +53,9 @@ class SessionController extends AbstractController
     }
 
     // PATCH /api/sessions/{id}/stop — ends an active session.
-    // Score remains as last calculated by the scoring service during event ingestion.
+    // Optional body: { "endedAt": "ISO8601" } for offline/buffered drives (client-provided end time).
     #[Route('/{id}/stop', name: 'api_sessions_stop', methods: ['PATCH'])]
-    public function stop(DrivingSession $session, EntityManagerInterface $em): JsonResponse
+    public function stop(DrivingSession $session, Request $request, EntityManagerInterface $em): JsonResponse
     {
         // Prevent users from stopping sessions that belong to someone else
         if ($session->getDriver() !== $this->getUser()) {
@@ -57,7 +67,16 @@ class SessionController extends AbstractController
             return $this->json(['error' => 'Session is not active'], 400);
         }
 
-        $session->setEndedAt(new \DateTimeImmutable());
+        $body = json_decode($request->getContent(), true) ?: [];
+        if (!empty($body['endedAt'])) {
+            try {
+                $session->setEndedAt(new \DateTimeImmutable($body['endedAt']));
+            } catch (\Throwable) {
+                $session->setEndedAt(new \DateTimeImmutable());
+            }
+        } else {
+            $session->setEndedAt(new \DateTimeImmutable());
+        }
         $session->setStatus('completed');
         $em->flush();
 

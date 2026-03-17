@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getToken, removeToken } from './src/storage/token';
 import { setUnauthorizedHandler } from './src/api/client';
 import client from './src/api/client';
+import { setupDailyNotification, scheduleDailyReminder } from './src/notifications';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -35,6 +36,8 @@ export default function App() {
       try {
         await client.get('/me');
         setToken(stored);
+        await setupDailyNotification();
+        await scheduleDailyReminder({ hour: 8, minute: 0 });
       } catch (e) {
         // Token exists but is rejected by the server — clear it and show login
         await removeToken();

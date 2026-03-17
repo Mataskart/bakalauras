@@ -7,6 +7,13 @@ import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import client from '../api/client';
+import {
+  getBuffer,
+  appendToBuffer,
+  clearBuffer,
+  trimStationaryTail,
+  hasBeenStationaryFor15Min,
+} from '../driveBuffer';
 
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
@@ -16,19 +23,25 @@ const TEXT = '#e6edf3';
 const MUTED = '#8b949e';
 const DANGER = '#f85149';
 
+const DRIVING_START_KMH = 10;
+const DRIVING_START_SECONDS = 5;
+const BATCH_SIZE = 50;
+
 export default function HomeScreen() {
-  const session = useRef(null);
   const [score, setScore] = useState(null);
   const [speedLimit, setSpeedLimit] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
+  const [autoDetect, setAutoDetect] = useState(false);
 
   const accelerometerData = useRef({ x: 0, y: 0, z: 0 });
   const peakAccelerometer = useRef({ x: 0, y: 0, z: 0 });
   const gravity = useRef({ x: 0, y: 0, z: 0 });
-  const locationData = useRef({ latitude: 0, longitude: 0 });
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
+  const autoStartCheckRef = useRef(null);
+  const autoCompleteCheckRef = useRef(null);
+  const drivingStartCountdownRef = useRef(0);
 
   useEffect(() => {
     requestPermissions();
@@ -42,28 +55,36 @@ export default function HomeScreen() {
     }
   };
 
-  const startTracking = async () => {
+  const pushOneEvent = async (location, peak) => {
+    const speedMs = location.coords.speed;
+    const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : undefined;
+    const event = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      accelerationX: peak.x * 9.8,
+      accelerationY: peak.y * 9.8,
+      accelerationZ: peak.z * 9.8,
+      recordedAt: new Date().toISOString(),
+    };
+    if (speedKmh !== undefined) event.speed = speedKmh;
+    await appendToBuffer([event]);
+  };
+
+  const startTracking = () => {
     Accelerometer.setUpdateInterval(100);
     accelSubscription.current = Accelerometer.addListener((data) => {
       const alpha = 0.8;
-
-      // Low-pass filter isolates the gravity component
       gravity.current = {
         x: alpha * gravity.current.x + (1 - alpha) * data.x,
         y: alpha * gravity.current.y + (1 - alpha) * data.y,
         z: alpha * gravity.current.z + (1 - alpha) * data.z,
       };
-
-      // Subtract gravity to get only motion-induced acceleration
       const linear = {
         x: data.x - gravity.current.x,
         y: data.y - gravity.current.y,
         z: data.z - gravity.current.z,
       };
-
       accelerometerData.current = linear;
-
-      // Track peak linear acceleration within the 2s window
       peakAccelerometer.current = {
         x: Math.abs(linear.x) > Math.abs(peakAccelerometer.current.x) ? linear.x : peakAccelerometer.current.x,
         y: Math.abs(linear.y) > Math.abs(peakAccelerometer.current.y) ? linear.y : peakAccelerometer.current.y,
@@ -74,39 +95,27 @@ export default function HomeScreen() {
     intervalRef.current = setInterval(async () => {
       try {
         const location = await Location.getCurrentPositionAsync({});
-        locationData.current = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        };
-
-        // Speed from GPS (m/s); convert to km/h for API. -1 or null = unavailable.
-        const speedMs = location.coords.speed;
-        const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : undefined;
-
-        // Send the peak reading from this window, not just the latest
         const peak = peakAccelerometer.current;
-        const payload = {
-          latitude: locationData.current.latitude,
-          longitude: locationData.current.longitude,
-          accelerationX: peak.x * 9.8,
-          accelerationY: peak.y * 9.8,
-          accelerationZ: peak.z * 9.8,
-        };
-        if (speedKmh !== undefined) payload.speed = speedKmh;
-
-        const response = await client.post(`/sessions/${session.current.id}/events`, [payload]);
-
-        // Reset peak so the next window starts fresh
+        await pushOneEvent(location, peak);
         peakAccelerometer.current = { x: 0, y: 0, z: 0 };
 
-        setScore(response.data.currentScore);
-        setSpeedLimit(response.data.speedLimitKmh ?? null);
-      } catch (error) {
-        console.log('Event send error:', error.message);
+        if (autoDetect) {
+          const speedMs = location.coords.speed;
+          const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
+          const buffer = await getBuffer();
+          if (hasBeenStationaryFor15Min(buffer)) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            await handleCompleteDrive();
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Location/buffer error:', e.message);
       }
     }, 2000);
 
-    await activateKeepAwakeAsync();
+    activateKeepAwakeAsync();
     setTracking(true);
   };
 
@@ -119,41 +128,116 @@ export default function HomeScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    if (autoStartCheckRef.current) {
+      clearInterval(autoStartCheckRef.current);
+      autoStartCheckRef.current = null;
+    }
+    if (autoCompleteCheckRef.current) {
+      clearInterval(autoCompleteCheckRef.current);
+      autoCompleteCheckRef.current = null;
+    }
     peakAccelerometer.current = { x: 0, y: 0, z: 0 };
     gravity.current = { x: 0, y: 0, z: 0 };
     deactivateKeepAwake();
     setTracking(false);
   };
 
+  const uploadBufferAndStop = async (trimmed) => {
+    if (trimmed.length === 0) {
+      await clearBuffer();
+      setScore(null);
+      setSpeedLimit(null);
+      return;
+    }
+    const startedAt = trimmed[0].recordedAt;
+    const endedAt = trimmed[trimmed.length - 1].recordedAt;
+
+    const sessionRes = await client.post('/sessions', { startedAt });
+    const sessionId = sessionRes.data.id;
+
+    for (let i = 0; i < trimmed.length; i += BATCH_SIZE) {
+      const batch = trimmed.slice(i, i + BATCH_SIZE);
+      const payload = batch.map((e) => ({
+        latitude: e.latitude,
+        longitude: e.longitude,
+        accelerationX: e.accelerationX,
+        accelerationY: e.accelerationY,
+        accelerationZ: e.accelerationZ,
+        recordedAt: e.recordedAt,
+        ...(e.speed !== undefined && { speed: e.speed }),
+      }));
+      const eventRes = await client.post(`/sessions/${sessionId}/events`, payload);
+      if (eventRes.data.speedLimitKmh != null) setSpeedLimit(eventRes.data.speedLimitKmh);
+    }
+
+    const stopRes = await client.patch(`/sessions/${sessionId}/stop`, { endedAt });
+    setScore(stopRes.data.score);
+    setSpeedLimit(null);
+    await clearBuffer();
+  };
+
+  const handleCompleteDrive = async () => {
+    setLoading(true);
+    stopTracking();
+    setSpeedLimit(null);
+    try {
+      const buffer = await getBuffer();
+      const trimmed = trimStationaryTail(buffer);
+      await uploadBufferAndStop(trimmed);
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Could not save drive');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStartSession = async () => {
     setLoading(true);
     try {
-      const response = await client.post('/sessions');
-      session.current = response.data;
+      await clearBuffer();
       setScore(null);
       setSpeedLimit(null);
-      await startTracking();
+      startTracking();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start session');
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start');
     } finally {
       setLoading(false);
     }
   };
 
   const handleStopSession = async () => {
-    setLoading(true);
-    stopTracking();
-    setSpeedLimit(null);
-    try {
-      const response = await client.patch(`/sessions/${session.current.id}/stop`);
-      setScore(response.data.score);
-      session.current = null;
-    } catch (error) {
-      Alert.alert('Error', 'Could not stop session');
-    } finally {
-      setLoading(false);
-    }
+    await handleCompleteDrive();
   };
+
+  useEffect(() => {
+    if (!autoDetect || tracking) return;
+    autoStartCheckRef.current = setInterval(async () => {
+      try {
+        const location = await Location.getCurrentPositionAsync({});
+        const speedMs = location.coords.speed;
+        const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
+        if (speedKmh >= DRIVING_START_KMH) {
+          drivingStartCountdownRef.current += 1;
+          if (drivingStartCountdownRef.current >= Math.ceil(DRIVING_START_SECONDS / 2)) {
+            drivingStartCountdownRef.current = 0;
+            if (autoStartCheckRef.current) {
+              clearInterval(autoStartCheckRef.current);
+              autoStartCheckRef.current = null;
+            }
+            await handleStartSession();
+          }
+        } else {
+          drivingStartCountdownRef.current = 0;
+        }
+      } catch (_) {}
+    }, 2000);
+    return () => {
+      if (autoStartCheckRef.current) {
+        clearInterval(autoStartCheckRef.current);
+        autoStartCheckRef.current = null;
+      }
+    };
+  }, [autoDetect, tracking]);
 
   const getScoreColor = (s) => {
     if (s >= 80) return '#3fb950';
@@ -173,6 +257,16 @@ export default function HomeScreen() {
 
       <View style={styles.header}>
         <Text style={styles.title}>keliq</Text>
+        {!tracking && (
+          <TouchableOpacity
+            style={[styles.autoToggle, autoDetect && styles.autoToggleOn]}
+            onPress={() => setAutoDetect((a) => !a)}
+          >
+            <Text style={styles.autoToggleText}>
+              {autoDetect ? 'Auto on' : 'Auto off'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.scoreArea}>
@@ -193,7 +287,7 @@ export default function HomeScreen() {
             <Text style={styles.scoreLabel}>DRIVE SCORE</Text>
             <Text style={styles.scorePlaceholder}>—</Text>
             <Text style={styles.scoreHint}>
-              {tracking ? 'Calculating...' : 'Start a drive to see your score'}
+              {tracking ? 'Recording… Save when you stop' : (autoDetect ? 'Auto: drive will start when moving' : 'Start a drive to see your score')}
             </Text>
           </>
         )}
@@ -202,7 +296,7 @@ export default function HomeScreen() {
       {tracking && (
         <View style={styles.recordingRow}>
           <View style={styles.recordingDot} />
-          <Text style={styles.recordingText}>RECORDING</Text>
+          <Text style={styles.recordingText}>RECORDING (saved when you stop)</Text>
         </View>
       )}
 
@@ -225,7 +319,7 @@ export default function HomeScreen() {
             activeOpacity={0.85}
           >
             <Text style={styles.driveButtonText}>
-              {tracking ? 'STOP' : 'START'}
+              {tracking ? 'STOP & SAVE' : 'START'}
             </Text>
             <Text style={styles.driveButtonSub}>
               DRIVE
@@ -256,6 +350,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: TEXT,
     letterSpacing: -0.5,
+  },
+  autoToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  autoToggleOn: {
+    borderColor: ACCENT,
+    backgroundColor: ACCENT + '22',
+  },
+  autoToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: MUTED,
   },
   scoreArea: {
     alignItems: 'center',
