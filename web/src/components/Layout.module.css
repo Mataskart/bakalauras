@@ -1,0 +1,99 @@
+.layout {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.logo:hover {
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.nav a:hover {
+  color: var(--text);
+}
+
+.registerLink {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white !important;
+  border-radius: 6px;
+}
+
+.registerLink:hover {
+  opacity: 0.9;
+  text-decoration: none !important;
+}
+
+.user {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.logoutBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.logoutBtn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.main {
+  flex: 1;
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 16px 0;
+  margin-top: auto;
+}
+
+.footerText {
+  color: var(--muted);
+  font-size: 0.875rem;
+}

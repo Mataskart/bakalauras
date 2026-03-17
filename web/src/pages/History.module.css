@@ -1,0 +1,87 @@
+.page {
+  padding: 2rem 0 4rem;
+}
+
+.container {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+}
+
+.muted, .empty {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.scoreBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.cardBody {
+  padding: 1rem 1rem 1rem 1.25rem;
+}
+
+.cardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.cardRow + .cardRow {
+  margin-top: 4px;
+}
+
+.date {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.duration {
+  color: var(--muted);
+}
+
+.status {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.score {
+  font-weight: 600;
+}
