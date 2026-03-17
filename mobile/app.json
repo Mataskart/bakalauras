@@ -22,6 +22,7 @@
       "package": "lt.keliq.app",
       "label": "keliq",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0e1117"
       },
       "permissions": [
