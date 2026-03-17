@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import client from '../api/client';
 
 const ACCENT = '#007ACC';
@@ -40,7 +41,7 @@ export default function HomeScreen() {
     }
   };
 
-  const startTracking = () => {
+  const startTracking = async () => {
     Accelerometer.setUpdateInterval(100);
     accelSubscription.current = Accelerometer.addListener((data) => {
       const alpha = 0.8;
@@ -96,6 +97,7 @@ export default function HomeScreen() {
       }
     }, 2000);
 
+    await activateKeepAwakeAsync();
     setTracking(true);
   };
 
@@ -110,6 +112,7 @@ export default function HomeScreen() {
     }
     peakAccelerometer.current = { x: 0, y: 0, z: 0 };
     gravity.current = { x: 0, y: 0, z: 0 };
+    deactivateKeepAwake();
     setTracking(false);
   };
 
@@ -119,7 +122,7 @@ export default function HomeScreen() {
       const response = await client.post('/sessions');
       session.current = response.data;
       setScore(null);
-      startTracking();
+      await startTracking();
     } catch (error) {
       Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start session');
     } finally {

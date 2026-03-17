@@ -10,15 +10,15 @@ use App\Entity\DrivingSession;
 class ScoringService
 {
     // Minimum accelerometer magnitude (m/s²) to classify an event as dangerous
-    private const HARD_BRAKE_THRESHOLD = 4.0;
-    private const HARD_ACCELERATION_THRESHOLD = 3.5;
-    private const SHARP_TURN_THRESHOLD = 3.0;
+    private const HARD_BRAKE_THRESHOLD = 2.5;       // was 4.0
+    private const HARD_ACCELERATION_THRESHOLD = 2.5; // was 3.5
+    private const SHARP_TURN_THRESHOLD = 2.0;        // was 3.0
 
     // How many penalty points each dangerous event type contributes.
     // Hard braking is penalised most heavily as it poses the greatest accident risk.
-    private const HARD_BRAKE_PENALTY = 10.0;
-    private const HARD_ACCELERATION_PENALTY = 7.0;
-    private const SHARP_TURN_PENALTY = 8.0;
+    private const HARD_BRAKE_PENALTY = 30.0;         // was 10.0
+    private const HARD_ACCELERATION_PENALTY = 20.0;  // was 7.0
+    private const SHARP_TURN_PENALTY = 25.0;         // was 8.0
 
     // Calculates and returns the final score for a completed session.
     // Also classifies each event in-place (eventType field) as a side effect.
