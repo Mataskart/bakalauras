@@ -46,11 +46,3 @@ jobs:
           target: '/var/www/bakalauras'
           overwrite: true
 
-      - name: Fix web dist permissions
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            chmod -R a+rX /var/www/bakalauras/web
