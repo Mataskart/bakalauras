@@ -37,7 +37,6 @@ export default function App() {
       try {
         await client.get('/me');
         setToken(stored);
-        await setupDailyNotification();
         await scheduleDailySummaryAt21();
         await registerDailySummaryTask();
       } catch (e) {
@@ -71,6 +70,15 @@ export default function App() {
           onGoToLogin={() => setScreen('login')}
         />;
   }
+
+  useEffect(() => {
+    if (!token) return;
+    const t = setTimeout(async () => {
+      const { setupDailyNotification } = await import('./src/notifications');
+      await setupDailyNotification();
+    }, 500);
+    return () => clearTimeout(t);
+  }, [token]);
 
   return (
     <NavigationContainer>

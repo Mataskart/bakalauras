@@ -11,16 +11,22 @@ Notifications.setNotificationHandler({
 const DAILY_CHANNEL_ID = 'keliq-daily';
 
 /**
- * Request permission and set up channels. Call once after login.
+ * Request notification permission. Call after login so the prompt is shown.
+ * Returns true if granted.
+ */
+export async function requestNotificationPermission() {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return true;
+  const { status: requested } = await Notifications.requestPermissionsAsync();
+  return requested === 'granted';
+}
+
+/**
+ * Set up channels and ensure permission. Call once after login.
  */
 export async function setupDailyNotification() {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let status = existing;
-  if (existing !== 'granted') {
-    const { status: requested } = await Notifications.requestPermissionsAsync();
-    status = requested;
-  }
-  if (status !== 'granted') return;
+  const granted = await requestNotificationPermission();
+  if (!granted) return;
 
   await Notifications.setNotificationChannelAsync(DAILY_CHANNEL_ID, {
     name: 'Daily summary',

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, StatusBar, AppState
+  Alert, ActivityIndicator, StatusBar, AppState, Linking
 } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
@@ -308,16 +308,18 @@ export default function HomeScreen() {
                     text: 'Continue',
                     onPress: async () => {
                       const granted = await requestBackgroundLocationPermission();
-                      if (!granted) {
-                        Alert.alert(
-                          'Permission needed',
-                          'Background location is required for Auto mode. Please allow "All the time" in settings, then enable Auto again.'
-                        );
+                      if (granted) {
+                        setAutoDetect(true);
+                        await persistAutoDetect(true);
+                        startBackgroundWatching();
                         return;
                       }
-                      setAutoDetect(true);
-                      await persistAutoDetect(true);
-                      startBackgroundWatching();
+                      await Linking.openSettings();
+                      Alert.alert(
+                        'Set location to "Allow all the time"',
+                        'In keliq\'s settings, open Permissions and set Location to "Allow all the time". Then return here and tap Auto on again.',
+                        [{ text: 'OK' }]
+                      );
                     },
                   },
                 ]
