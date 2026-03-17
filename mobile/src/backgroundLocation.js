@@ -153,6 +153,20 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 });
 
 /**
+ * Check if we already have background (or sufficient) location permission without requesting.
+ */
+export async function hasBackgroundLocationPermission() {
+  try {
+    const fg = await Location.getForegroundPermissionsAsync();
+    if (fg.status !== 'granted') return false;
+    const bg = await Location.getBackgroundPermissionsAsync();
+    return bg.status === 'granted';
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
  * Request background location permission. Call when user enables Auto.
  * On Android 11+ this may open system settings; explain to the user first.
  * @returns {Promise<boolean>} true if background (or foreground-only) allowed so we can proceed

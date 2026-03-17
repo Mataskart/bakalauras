@@ -23,6 +23,7 @@ import {
   pauseBackgroundRecording,
   resumeBackgroundRecording,
   requestBackgroundLocationPermission,
+  hasBackgroundLocationPermission,
 } from '../backgroundLocation';
 import { getAutoDetect, setAutoDetect as persistAutoDetect } from '../storage/autoDetect';
 
@@ -236,19 +237,13 @@ export default function HomeScreen() {
       return;
     }
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const tryStart = async () => {
       try {
-        const started = await startBackgroundWatching();
-        if (!cancelled && !started) {
-          setAutoDetect(false);
-          await persistAutoDetect(false);
-        }
-      } catch (_) {
-        if (!cancelled) {
-          setAutoDetect(false);
-          persistAutoDetect(false).catch(() => {});
-        }
-      }
+        await startBackgroundWatching();
+      } catch (_) {}
+    };
+    const t = setTimeout(() => {
+      tryStart();
     }, 800);
     return () => {
       cancelled = true;
@@ -271,6 +266,8 @@ export default function HomeScreen() {
     return () => clearInterval(t);
   }, [autoDetect, loading]);
 
+  const autoDetectRef = useRef(autoDetect);
+  autoDetectRef.current = autoDetect;
   useEffect(() => {
     try {
       const sub = AppState.addEventListener('change', (nextAppState) => {
@@ -279,6 +276,9 @@ export default function HomeScreen() {
           resumeBackgroundRecording().catch(() => {});
         }
         if (nextAppState === 'active') {
+          if (autoDetectRef.current) {
+            startBackgroundWatching().catch(() => {});
+          }
           isBackgroundRecording().then((recording) => {
             if (recording && !intervalRef.current) {
               setTracking(true);
@@ -319,6 +319,13 @@ export default function HomeScreen() {
                 setAutoDetect(false);
                 await persistAutoDetect(false);
                 stopBackgroundUpdates();
+                return;
+              }
+              const alreadyGranted = await hasBackgroundLocationPermission();
+              if (alreadyGranted) {
+                setAutoDetect(true);
+                await persistAutoDetect(true);
+                startBackgroundWatching().catch(() => {});
                 return;
               }
               Alert.alert(
@@ -405,11 +412,13 @@ export default function HomeScreen() {
             activeOpacity={0.85}
           >
             <Text style={styles.driveButtonText}>
-              {tracking ? 'STOP & SAVE' : 'START'}
+              {tracking ? 'STOP' : 'START'}
             </Text>
-            <Text style={styles.driveButtonSub}>
-              DRIVE
-            </Text>
+            {!tracking && (
+              <Text style={styles.driveButtonSub}>
+                DRIVE
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -553,6 +562,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: TEXT,
     letterSpacing: 2,
+    textAlign: 'center',
   },
   driveButtonSub: {
     fontSize: 12,
@@ -560,5 +570,6 @@ const styles = StyleSheet.create({
     color: MUTED,
     letterSpacing: 3,
     marginTop: 2,
+    textAlign: 'center',
   },
 });

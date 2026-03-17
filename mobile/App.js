@@ -27,6 +27,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (token) {
+      setupDailyNotification().catch(() => {});
+    }
+  }, [token]);
+
+  useEffect(() => {
     const bootstrapAuth = async () => {
       const stored = await getToken();
       if (!stored) {
