@@ -4,16 +4,14 @@ framework:
         #prefix_seed: your_vendor_name/app_name
 
         # The "app" cache stores to the filesystem by default.
-        # The data in this cache should persist between deploys.
-        # Other options include:
+        app: cache.adapter.filesystem
 
-        # Redis
-        #app: cache.adapter.redis
-        #default_redis_provider: redis://localhost
+        # Leaderboard: Redis with 60s TTL. Uses REDIS_URL (e.g. redis://localhost:6379).
+        # In dev/test without Redis, use adapter: cache.adapter.filesystem temporarily.
+        pools:
+            leaderboard:
+                adapter: cache.adapter.redis
+                default_lifetime: 60
+                provider: '%env(REDIS_URL)%'
 
-        # APCu (not recommended with heavy random-write workloads as memory fragmentation can cause perf issues)
-        #app: cache.adapter.apcu
-
-        # Namespaced pools use the above "app" backend by default
-        #pools:
-            #my.dedicated.cache: null
+# In test we inject cache.app for leaderboard (see services.yaml when@test) so Redis is not required.

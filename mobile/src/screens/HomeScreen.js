@@ -78,15 +78,22 @@ export default function HomeScreen() {
           longitude: location.coords.longitude,
         };
 
+        // Speed from GPS (m/s); convert to km/h for API. -1 or null = unavailable.
+        const speedMs = location.coords.speed;
+        const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : undefined;
+
         // Send the peak reading from this window, not just the latest
         const peak = peakAccelerometer.current;
-        const response = await client.post(`/sessions/${session.current.id}/events`, [{
+        const payload = {
           latitude: locationData.current.latitude,
           longitude: locationData.current.longitude,
           accelerationX: peak.x * 9.8,
           accelerationY: peak.y * 9.8,
           accelerationZ: peak.z * 9.8,
-        }]);
+        };
+        if (speedKmh !== undefined) payload.speed = speedKmh;
+
+        const response = await client.post(`/sessions/${session.current.id}/events`, [payload]);
 
         // Reset peak so the next window starts fresh
         peakAccelerometer.current = { x: 0, y: 0, z: 0 };

@@ -19,14 +19,15 @@ class ScoringServiceTest extends TestCase
         $this->scoring = new ScoringService();
     }
 
-    // Helper to build a DrivingSession containing a set of events
-    // defined by their X and Y acceleration values.
+    // Helper to build a DrivingSession containing a set of events.
+    // Each event: [x, y, z] or [x, y, z, speed, speedLimitKmh] for speeding tests.
     private function makeSession(array $events): DrivingSession
     {
         $session = new DrivingSession();
         $collection = new ArrayCollection();
 
-        foreach ($events as [$x, $y, $z]) {
+        foreach ($events as $ev) {
+            [$x, $y, $z] = $ev;
             $event = new DrivingEvent();
             $event->setAccelerationX($x);
             $event->setAccelerationY($y);
@@ -34,6 +35,12 @@ class ScoringServiceTest extends TestCase
             $event->setLatitude(54.0);
             $event->setLongitude(23.0);
             $event->setRecordedAt(new \DateTimeImmutable());
+            if (isset($ev[3])) {
+                $event->setSpeed((float) $ev[3]);
+            }
+            if (isset($ev[4])) {
+                $event->setSpeedLimitKmh((float) $ev[4]);
+            }
             $collection->add($event);
         }
 
@@ -143,5 +150,68 @@ class ScoringServiceTest extends TestCase
         $score = $this->scoring->calculateScore($session);
         $this->assertGreaterThanOrEqual(0.0, $score);
         $this->assertLessThanOrEqual(100.0, $score);
+    }
+
+    public function testSpeedingReducesScore(): void
+    {
+        // Normal acceleration but speed 60 km/h where limit is 50 (80% weight)
+        $session = $this->makeSession([
+            [0.1, 0.2, 9.8, 60.0, 50.0],
+        ]);
+
+        $score = $this->scoring->calculateScore($session);
+        $this->assertLessThan(100.0, $score);
+        $events = $session->getDrivingEvents()->toArray();
+        $this->assertTrue($events[0]->isSpeeding());
+    }
+
+    public function testSpeedAtOrBelowLimitDoesNotPenalise(): void
+    {
+        $session = $this->makeSession([
+            [0.1, 0.2, 9.8, 50.0, 50.0],  // at limit
+            [0.1, 0.2, 9.8, 40.0, 50.0],  // below limit
+        ]);
+
+        $score = $this->scoring->calculateScore($session);
+        $this->assertSame(100.0, $score);
+        foreach ($session->getDrivingEvents() as $event) {
+            $this->assertFalse($event->isSpeeding());
+        }
+    }
+
+    public function testFivePercentToleranceNoPenaltyWhenWithinTolerance(): void
+    {
+        // 52.5 km/h with limit 50: 52.5 <= 50 * 1.05 = 52.5, so no penalty
+        $session = $this->makeSession([
+            [0.1, 0.2, 9.8, 52.5, 50.0],
+        ]);
+        $score = $this->scoring->calculateScore($session);
+        $this->assertSame(100.0, $score);
+        $this->assertFalse($session->getDrivingEvents()->first()->isSpeeding());
+    }
+
+    public function testFivePercentTolerancePenaltyWhenOverTolerance(): void
+    {
+        // 53 km/h with limit 50: over 52.5, so speeding
+        $session = $this->makeSession([
+            [0.1, 0.2, 9.8, 53.0, 50.0],
+        ]);
+        $score = $this->scoring->calculateScore($session);
+        $this->assertLessThan(100.0, $score);
+        $this->assertTrue($session->getDrivingEvents()->first()->isSpeeding());
+    }
+
+    public function testSpeedingAndAccelerationPenaltiesStack(): void
+    {
+        // One event: hard brake and speeding (80% speed + 20% smooth)
+        $session = $this->makeSession([
+            [0.0, -5.2, 9.8, 70.0, 50.0],
+        ]);
+
+        $score = $this->scoring->calculateScore($session);
+        $this->assertLessThan(100.0, $score);
+        $events = $session->getDrivingEvents()->toArray();
+        $this->assertSame('hard_brake', $events[0]->getEventType());
+        $this->assertTrue($events[0]->isSpeeding());
     }
 }

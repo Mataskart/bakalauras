@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\DrivingSession;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,6 +15,12 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/sessions')]
 class SessionController extends AbstractController
 {
+    private const LEADERBOARD_CACHE_KEY = 'leaderboard_top10';
+
+    public function __construct(
+        private readonly CacheItemPoolInterface $leaderboardCache
+    ) {
+    }
     // POST /api/sessions — starts a new active driving session for the logged-in user
     #[Route('', name: 'api_sessions_start', methods: ['POST'])]
     public function start(EntityManagerInterface $em): JsonResponse
@@ -53,6 +60,8 @@ class SessionController extends AbstractController
         $session->setEndedAt(new \DateTimeImmutable());
         $session->setStatus('completed');
         $em->flush();
+
+        $this->leaderboardCache->deleteItem(self::LEADERBOARD_CACHE_KEY);
 
         return $this->json([
             'id' => $session->getId(),

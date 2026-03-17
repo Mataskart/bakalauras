@@ -5,6 +5,8 @@ namespace App\Controller;
 use App\Entity\DrivingEvent;
 use App\Entity\DrivingSession;
 use App\Service\ScoringService;
+use App\Service\SpeedImputationService;
+use App\Service\SpeedLimitService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,7 +26,9 @@ class EventController extends AbstractController
         int $sessionId,
         Request $request,
         EntityManagerInterface $em,
-        ScoringService $scoring
+        ScoringService $scoring,
+        SpeedLimitService $speedLimitService,
+        SpeedImputationService $speedImputation
     ): JsonResponse {
         $session = $em->getRepository(DrivingSession::class)->find($sessionId);
 
@@ -48,6 +52,8 @@ class EventController extends AbstractController
         // Wrapping a single event in an array allows the same loop to handle both.
         $eventsData = isset($data[0]) ? $data : [$data];
 
+        $speedLimitService->clearCache();
+
         foreach ($eventsData as $eventData) {
             if (!isset($eventData['accelerationX'], $eventData['accelerationY'], $eventData['accelerationZ'], $eventData['latitude'], $eventData['longitude'])) {
                 return $this->json(['error' => 'Missing required fields'], 400);
@@ -62,14 +68,26 @@ class EventController extends AbstractController
             $event->setAccelerationY($eventData['accelerationY']);
             $event->setAccelerationZ($eventData['accelerationZ']);
 
+            if (isset($eventData['speed']) && is_numeric($eventData['speed']) && (float) $eventData['speed'] >= 0) {
+                $speedKmh = (float) $eventData['speed'];
+                $event->setSpeed($speedKmh);
+                $limit = $speedLimitService->getSpeedLimitKmh($eventData['latitude'], $eventData['longitude']);
+                if ($limit !== null) {
+                    $event->setSpeedLimitKmh($limit);
+                }
+            }
+
+            $session->addDrivingEvent($event);
             $em->persist($event);
         }
 
         // Persist all events in a single transaction for efficiency
         $em->flush();
 
+        // Fill missing speed from consecutive GPS points when device did not report speed
+        $speedImputation->imputeForSession($session);
+
         // Recalculate score across all session events including the new batch.
-        // Score is stored on the session so it can be returned when the session is fetched.
         $score = $scoring->calculateScore($session);
         $session->setScore($score);
         $em->flush();

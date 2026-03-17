@@ -44,6 +44,18 @@ class DrivingEvent
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $eventType = null;
 
+    // Optional: speed at time of reading (km/h). From device GPS or computed.
+    #[ORM\Column(nullable: true)]
+    private ?float $speed = null;
+
+    // Speed limit at this location from OpenStreetMap (km/h). Null if unknown.
+    #[ORM\Column(nullable: true)]
+    private ?float $speedLimitKmh = null;
+
+    // Set by scoring when speed > speedLimitKmh (4th criterion: speeding).
+    #[ORM\Column(options: ['default' => false])]
+    private bool $speeding = false;
+
     // The session this event belongs to
     #[ORM\ManyToOne(inversedBy: 'drivingEvents')]
     #[ORM\JoinColumn(nullable: false)]
@@ -128,6 +140,39 @@ class DrivingEvent
     public function setEventType(?string $eventType): static
     {
         $this->eventType = $eventType;
+        return $this;
+    }
+
+    public function getSpeed(): ?float
+    {
+        return $this->speed;
+    }
+
+    public function setSpeed(?float $speed): static
+    {
+        $this->speed = $speed;
+        return $this;
+    }
+
+    public function getSpeedLimitKmh(): ?float
+    {
+        return $this->speedLimitKmh;
+    }
+
+    public function setSpeedLimitKmh(?float $speedLimitKmh): static
+    {
+        $this->speedLimitKmh = $speedLimitKmh;
+        return $this;
+    }
+
+    public function isSpeeding(): bool
+    {
+        return $this->speeding;
+    }
+
+    public function setSpeeding(bool $speeding): static
+    {
+        $this->speeding = $speeding;
         return $this;
     }
 

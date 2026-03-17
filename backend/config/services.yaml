@@ -20,5 +20,22 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    # add more service definitions when explicit configuration is needed
-    # please note that last definitions always *replace* previous ones
+    # Inject leaderboard cache pool into controllers that need it
+    App\Controller\LeaderboardController:
+        bind:
+            $leaderboardCache: '@leaderboard'
+    App\Controller\SessionController:
+        bind:
+            $leaderboardCache: '@leaderboard'
+
+when@test:
+    services:
+        App\Controller\LeaderboardController:
+            bind:
+                $leaderboardCache: '@cache.app'
+        App\Controller\SessionController:
+            bind:
+                $leaderboardCache: '@cache.app'
+
+# add more service definitions when explicit configuration is needed
+# please note that last definitions always *replace* previous ones
