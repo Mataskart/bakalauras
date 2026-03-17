@@ -2,18 +2,22 @@ import { useState, useEffect } from 'react';
 import { client } from '../api/client';
 import styles from './History.module.css';
 
+/** Parse ISO string as UTC (append Z if no timezone), then format in browser local time. */
 function formatDate(iso) {
   if (iso == null || iso === '') return '—';
-  const d = new Date(iso);
+  const s = String(iso).trim();
+  const utcIso = /Z$|[-+]\d{2}:?\d{2}$/.test(s) ? s : s.replace(/\.\d{3}$/, '') + 'Z';
+  const d = new Date(utcIso);
   if (Number.isNaN(d.getTime())) return '—';
-  const y = d.getFullYear();
-  const mo = d.getMonth();
-  const day = d.getDate();
-  const h = d.getHours();
-  const min = d.getMinutes();
-  const pad = (n) => String(n).padStart(2, '0');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${months[mo]} ${day}, ${y}, ${pad(h)}:${pad(min)}`;
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return formatter.format(d);
 }
 
 function formatDuration(startedAt, endedAt) {

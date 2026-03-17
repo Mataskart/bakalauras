@@ -6,7 +6,7 @@ export default function Contacts() {
       <div className={styles.container}>
         <h1 className={styles.title}>Contacts</h1>
         <p className={styles.intro}>
-          Get in touch about keliq — feedback, support, or partnership.
+          Get in touch about keliq - feedback, support, or partnership.
         </p>
         <div className={styles.card}>
           <h2 className={styles.cardTitle}>Project & support</h2>
@@ -24,7 +24,7 @@ export default function Contacts() {
             <li>
               <strong>Backend API</strong>{' '}
               <a href="https://keliq.lt" target="_blank" rel="noreferrer">
-                keliq.lt
+                TBD (Symfony backend)
               </a>
             </li>
           </ul>
@@ -33,7 +33,7 @@ export default function Contacts() {
           <h2 className={styles.cardTitle}>Author</h2>
           <p className={styles.cardText}>
             Developed as a bachelor’s thesis project. For academic or collaboration inquiries,
-            please refer to the repository or documentation.
+            please refer to the repository for documentation.
           </p>
         </div>
       </div>

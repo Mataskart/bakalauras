@@ -11,26 +11,26 @@ export default function Home() {
         <h1 className={styles.title}>keliq</h1>
         <p className={styles.tagline}>Safe driving, simple.</p>
         <p className={styles.intro}>
-          keliq is a driving safety monitor that uses your phone — no extra hardware.
+          keliq is a driving safety monitor that uses your phone - no extra hardware.
           Drive as usual; the app tracks smooth braking, acceleration, and turns, and compares
-          your speed to local limits. Get a live score, see your history, and see how you
+          your speed to local limits, with an option to do so in the background. Get a live score, see your history, and see how you
           rank on the leaderboard.
         </p>
         <div className={styles.features}>
           <div className={styles.feature}>
             <span className={styles.featureIcon}>📱</span>
-            <h3>Phone only</h3>
+            <h3>Requires only a phone</h3>
             <p>Uses the sensors and GPS you already have. No dongles or dash cams.</p>
           </div>
           <div className={styles.feature}>
             <span className={styles.featureIcon}>📊</span>
             <h3>Live score</h3>
-            <p>0–100 score based on smooth driving and speed compliance. See it update every few seconds.</p>
+            <p>0-100 score based on smooth driving and speed compliance. See it update every few seconds.</p>
           </div>
           <div className={styles.feature}>
             <span className={styles.featureIcon}>🗺️</span>
             <h3>Speed limits</h3>
-            <p>OpenStreetMap data shows the limit for your road. Stay within it for a better score.</p>
+            <p>OpenStreetMap data shows the limit for your road. Find out if you're able to stay within it for a better safety score.</p>
           </div>
         </div>
         <div className={styles.cta}>
