@@ -113,7 +113,7 @@ class SpeedLimitService
     /**
      * Parses OSM maxspeed value to km/h. Returns null for non-numeric (e.g. "EU:urban", "walk").
      */
-    private function parseMaxspeed(string $value): ?float
+    public function parseMaxspeed(string $value): ?float
     {
         $value = trim($value);
         if ($value === '') {
