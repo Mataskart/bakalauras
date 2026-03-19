@@ -7,19 +7,12 @@ import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import client from '../api/client';
-import {
-  getBuffer,
-  appendToBuffer,
-  clearBuffer,
-  trimStationaryTail,
-  hasBeenStationaryFor15Min,
-} from '../driveBuffer';
+import { getBuffer, clearBuffer } from '../driveBuffer';
 import { uploadDriveAndClear } from '../uploadDrive';
 import {
   startBackgroundWatching,
   stopBackgroundUpdates,
   isBackgroundRecording,
-  completeCurrentDriveAndStop,
   pauseBackgroundRecording,
   resumeBackgroundRecording,
   requestBackgroundLocationPermission,
@@ -29,7 +22,6 @@ import { getAutoDetect, setAutoDetect as persistAutoDetect } from '../storage/au
 
 const ACCENT = '#007ACC';
 const BG = '#0e1117';
-const SURFACE = '#161b22';
 const BORDER = '#30363d';
 const TEXT = '#e6edf3';
 const MUTED = '#8b949e';
@@ -40,6 +32,7 @@ const BATCH_SIZE = 50;
 export default function HomeScreen() {
   const [score, setScore] = useState(null);
   const [speedLimit, setSpeedLimit] = useState(null);
+  const [currentSpeed, setCurrentSpeed] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [autoDetect, setAutoDetect] = useState(false);
@@ -51,6 +44,11 @@ export default function HomeScreen() {
   const intervalRef = useRef(null);
   const accelSubscription = useRef(null);
   const autoCompleteCheckRef = useRef(null);
+  const speedLimitExpiryRef = useRef(null);
+  // Active session ID for streaming (manual drives and auto-drive takeovers)
+  const sessionIdRef = useRef(null);
+  // Events accumulated since last flush
+  const pendingEventsRef = useRef([]);
 
   useEffect(() => {
     getAutoDetect()
@@ -66,6 +64,19 @@ export default function HomeScreen() {
     return () => stopTracking();
   }, []);
 
+  // Live GPS speed — 500 ms watch, no backend involved
+  useEffect(() => {
+    let subscription = null;
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 500, distanceInterval: 0 },
+      (loc) => {
+        const speedMs = loc.coords.speed;
+        setCurrentSpeed(speedMs != null && speedMs >= 0 ? Math.round(speedMs * 3.6) : null);
+      }
+    ).then((sub) => { subscription = sub; }).catch(() => {});
+    return () => { subscription?.remove(); };
+  }, []);
+
   const requestPermissions = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -75,9 +86,10 @@ export default function HomeScreen() {
     } catch (_) {}
   };
 
-  const pushOneEvent = async (location, peak) => {
+  // Build a single event object from location + peak accelerometer (does not touch storage).
+  const buildEvent = (location, peak) => {
     const speedMs = location.coords.speed;
-    const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : undefined;
+    const speedKmh = speedMs != null && speedMs >= 0 ? speedMs * 3.6 : undefined;
     const event = {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
@@ -87,7 +99,25 @@ export default function HomeScreen() {
       recordedAt: new Date().toISOString(),
     };
     if (speedKmh !== undefined) event.speed = speedKmh;
-    await appendToBuffer([event]);
+    return event;
+  };
+
+  // POST accumulated events to the active session; update live score + speed limit from response.
+  const flushEvents = async () => {
+    if (!sessionIdRef.current || pendingEventsRef.current.length === 0) return;
+    const batch = [...pendingEventsRef.current];
+    pendingEventsRef.current = [];
+    try {
+      const res = await client.post(`/sessions/${sessionIdRef.current}/events`, batch);
+      if (res.data.currentScore != null) setScore(res.data.currentScore);
+      if (res.data.speedLimitKmh != null) {
+        setSpeedLimit(res.data.speedLimitKmh);
+        if (speedLimitExpiryRef.current) clearTimeout(speedLimitExpiryRef.current);
+        speedLimitExpiryRef.current = setTimeout(() => setSpeedLimit(null), 10000);
+      }
+    } catch (e) {
+      console.log('Events flush error:', e.message);
+    }
   };
 
   const startTracking = () => {
@@ -116,29 +146,15 @@ export default function HomeScreen() {
       try {
         const location = await Location.getCurrentPositionAsync({});
         const peak = peakAccelerometer.current;
-        await pushOneEvent(location, peak);
         peakAccelerometer.current = { x: 0, y: 0, z: 0 };
 
-        // Fetch speed limit for current position and update display
-        try {
-          const { lat, lon } = { lat: location.coords.latitude, lon: location.coords.longitude };
-          const res = await client.get(`/speed-limit?lat=${lat}&lon=${lon}`);
-          setSpeedLimit(res.data.speedLimitKmh ?? null);
-        } catch (_) {}
+        const event = buildEvent(location, peak);
+        pendingEventsRef.current.push(event);
 
-        if (autoDetect) {
-          const speedMs = location.coords.speed;
-          const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
-          const buffer = await getBuffer();
-          if (hasBeenStationaryFor15Min(buffer)) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-            await handleCompleteDrive();
-            return;
-          }
-        }
+        // Stream to API and get live score + speed limit back
+        await flushEvents();
       } catch (e) {
-        console.log('Location/buffer error:', e.message);
+        console.log('Location/stream error:', e.message);
       }
     }, 2000);
 
@@ -158,6 +174,10 @@ export default function HomeScreen() {
     if (autoCompleteCheckRef.current) {
       clearInterval(autoCompleteCheckRef.current);
       autoCompleteCheckRef.current = null;
+    }
+    if (speedLimitExpiryRef.current) {
+      clearTimeout(speedLimitExpiryRef.current);
+      speedLimitExpiryRef.current = null;
     }
     peakAccelerometer.current = { x: 0, y: 0, z: 0 };
     gravity.current = { x: 0, y: 0, z: 0 };
@@ -179,38 +199,46 @@ export default function HomeScreen() {
     deactivateKeepAwake();
   };
 
-  const takeOverWithAccel = async () => {
+  // Takes over an auto-detected background drive: uploads the accumulated buffer to create
+  // a live session, then starts foreground streaming so score updates every 2 s.
+  const takeOverAutoSession = async () => {
     await pauseBackgroundRecording();
+    const buffer = await getBuffer();
+    if (buffer.length > 0) {
+      try {
+        const startedAt = buffer[0].recordedAt;
+        const startRes = await client.post('/sessions', { startedAt });
+        sessionIdRef.current = startRes.data.id;
+        for (let i = 0; i < buffer.length; i += BATCH_SIZE) {
+          const batch = buffer.slice(i, i + BATCH_SIZE).map((e) => ({
+            latitude: e.latitude,
+            longitude: e.longitude,
+            accelerationX: e.accelerationX ?? 0,
+            accelerationY: e.accelerationY ?? 0,
+            accelerationZ: e.accelerationZ ?? 0,
+            recordedAt: e.recordedAt,
+            ...(e.speed !== undefined && { speed: e.speed }),
+          }));
+          const res = await client.post(`/sessions/${sessionIdRef.current}/events`, batch);
+          if (res.data.currentScore != null) setScore(res.data.currentScore);
+        }
+        await clearBuffer();
+      } catch (e) {
+        console.log('Auto session takeover error:', e.message);
+        sessionIdRef.current = null;
+      }
+    }
     startTracking();
   };
 
-  const uploadBufferAndStop = async (trimmed) => {
-    const result = await uploadDriveAndClear(trimmed);
-    setScore(result?.score ?? null);
-    setSpeedLimit(null);
-  };
-
-  const handleCompleteDrive = async () => {
-    setLoading(true);
-    stopTracking();
-    setSpeedLimit(null);
-    try {
-      const buffer = await getBuffer();
-      const trimmed = trimStationaryTail(buffer);
-      await uploadBufferAndStop(trimmed);
-    } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || error.message || 'Could not save drive');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Manual START: create a session immediately and begin streaming.
   const handleStartSession = async () => {
     setLoading(true);
     try {
-      await clearBuffer();
       setScore(null);
       setSpeedLimit(null);
+      const res = await client.post('/sessions', {});
+      sessionIdRef.current = res.data.id;
       startTracking();
     } catch (error) {
       Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start');
@@ -219,14 +247,61 @@ export default function HomeScreen() {
     }
   };
 
+  // Manual STOP for a foreground session (manual or taken-over auto drive).
+  // Flushes remaining events then stops the session — no trimming.
+  const handleCompleteDrive = async () => {
+    setLoading(true);
+    stopTracking();
+    setSpeedLimit(null);
+    try {
+      if (sessionIdRef.current) {
+        await flushEvents();
+        const stopRes = await client.patch(`/sessions/${sessionIdRef.current}/stop`, {
+          endedAt: new Date().toISOString(),
+        });
+        setScore(stopRes.data?.score ?? null);
+        sessionIdRef.current = null;
+      }
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Could not save drive');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStopSession = async () => {
     const fromBackground = await isBackgroundRecording();
+
     if (fromBackground) {
       setLoading(true);
       try {
-        const result = await completeCurrentDriveAndStop();
-        setScore(result?.score ?? null);
+        // Stop background location updates and dismiss notification
+        await stopBackgroundUpdates();
+
+        if (sessionIdRef.current) {
+          // App already took over: flush remaining events and close the session
+          stopTracking();
+          await flushEvents();
+          const stopRes = await client.patch(`/sessions/${sessionIdRef.current}/stop`, {
+            endedAt: new Date().toISOString(),
+          });
+          setScore(stopRes.data?.score ?? null);
+          sessionIdRef.current = null;
+          setSpeedLimit(null);
+        } else {
+          // User hit STOP before the app finished taking over: upload buffer as-is, no trim
+          stopTracking();
+          setSpeedLimit(null);
+          const buffer = await getBuffer();
+          const result = await uploadDriveAndClear(buffer);
+          setScore(result?.score ?? null);
+        }
         setTracking(false);
+
+        // Resume background watching if auto-detect is still on
+        if (autoDetect) {
+          startBackgroundWatching().catch(() => {});
+        }
       } catch (e) {
         Alert.alert('Error', 'Could not save drive');
       } finally {
@@ -234,6 +309,7 @@ export default function HomeScreen() {
       }
       return;
     }
+
     await handleCompleteDrive();
   };
 
@@ -243,7 +319,6 @@ export default function HomeScreen() {
       stopBackgroundUpdates().catch(() => {});
       return;
     }
-    let cancelled = false;
     const tryStart = async () => {
       try {
         await startBackgroundWatching();
@@ -253,7 +328,6 @@ export default function HomeScreen() {
       tryStart();
     }, 800);
     return () => {
-      cancelled = true;
       clearTimeout(t);
       stopBackgroundUpdates().catch(() => {});
     };
@@ -266,7 +340,7 @@ export default function HomeScreen() {
         const recording = await isBackgroundRecording();
         if (recording) {
           setTracking(true);
-          if (!intervalRef.current) takeOverWithAccel();
+          if (!intervalRef.current) takeOverAutoSession();
         }
       } catch (_) {}
     }, 2000);
@@ -279,8 +353,11 @@ export default function HomeScreen() {
     try {
       const sub = AppState.addEventListener('change', (nextAppState) => {
         if (nextAppState === 'background' && intervalRef.current) {
-          stopTrackingSilent();
-          resumeBackgroundRecording().catch(() => {});
+          // Flush pending events before pausing the interval
+          flushEvents().catch(() => {}).finally(() => {
+            stopTrackingSilent();
+            resumeBackgroundRecording().catch(() => {});
+          });
         }
         if (nextAppState === 'active') {
           if (autoDetectRef.current) {
@@ -289,7 +366,10 @@ export default function HomeScreen() {
           isBackgroundRecording().then((recording) => {
             if (recording && !intervalRef.current) {
               setTracking(true);
-              takeOverWithAccel().catch(() => {});
+              takeOverAutoSession().catch(() => {});
+            } else if (sessionIdRef.current && !intervalRef.current) {
+              // Manual session was paused when app went to background — restart streaming
+              startTracking();
             }
           }).catch(() => {});
         }
@@ -400,14 +480,29 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {tracking && (
-        <View style={styles.speedLimitRow}>
-          <Text style={styles.speedLimitLabel}>SPEED LIMIT</Text>
-          <Text style={styles.speedLimitValue}>
-            {speedLimit != null ? `${Math.round(speedLimit)} km/h` : '—'}
+      <View style={styles.statsRow}>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>SPEED</Text>
+          <Text style={styles.statValue}>
+            {currentSpeed != null ? `${currentSpeed}` : '—'}
           </Text>
+          <Text style={styles.statUnit}>km/h</Text>
         </View>
-      )}
+        {tracking && (
+          <View style={[styles.statBox, styles.statBoxRight]}>
+            <Text style={styles.statLabel}>LIMIT</Text>
+            <Text style={[
+              styles.statValue,
+              currentSpeed != null && speedLimit != null && currentSpeed > speedLimit
+                ? { color: DANGER }
+                : null,
+            ]}>
+              {speedLimit != null ? `${Math.round(speedLimit)}` : '—'}
+            </Text>
+            <Text style={styles.statUnit}>km/h</Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.buttonArea}>
         {loading ? (
@@ -527,21 +622,39 @@ const styles = StyleSheet.create({
     color: DANGER,
     letterSpacing: 2,
   },
-  speedLimitRow: {
-    alignItems: 'center',
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginBottom: 24,
+    gap: 24,
   },
-  speedLimitLabel: {
+  statBox: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  statBoxRight: {
+    borderLeftWidth: 1,
+    borderLeftColor: BORDER,
+    paddingLeft: 24,
+  },
+  statLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: MUTED,
     letterSpacing: 2,
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  speedLimitValue: {
-    fontSize: 20,
-    fontWeight: '700',
+  statValue: {
+    fontSize: 32,
+    fontWeight: '800',
     color: TEXT,
+    letterSpacing: -1,
+  },
+  statUnit: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: MUTED,
+    marginTop: 1,
   },
   buttonArea: {
     flex: 1,

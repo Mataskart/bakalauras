@@ -218,16 +218,16 @@ export async function isBackgroundRecording() {
   return mode === MODE_RECORD;
 }
 
-/** Stop recording, upload buffer, switch back to watch. Call from UI when user taps Stop. Returns { score } if upload succeeded. */
+/** Stop recording, upload buffer without trimming, switch back to watch.
+ *  Called from UI when user taps Stop on an auto-detected drive. Returns { score } if upload succeeded. */
 export async function completeCurrentDriveAndStop() {
   try {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
   } catch (_) {}
   const buffer = await getBuffer();
-  const trimmed = trimStationaryTail(buffer);
   let result = { score: null };
   try {
-    result = await uploadDriveAndClear(trimmed);
+    result = await uploadDriveAndClear(buffer);
   } catch (e) {
     console.warn('Upload error:', e.message);
   }

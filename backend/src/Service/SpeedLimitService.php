@@ -44,6 +44,13 @@ class SpeedLimitService
             return $cached->getSpeedLimitKmh();
         }
 
+        // GPS can land slightly off a road node. Search within ~100 m before hitting Overpass.
+        $nearby = $this->cacheRepository->findNearestWithin($latR, $lonR);
+        if ($nearby !== null) {
+            $this->memoryCache[$cacheKey] = $nearby->getSpeedLimitKmh();
+            return $nearby->getSpeedLimitKmh();
+        }
+
         $limit = $this->fetchFromOverpass($latitude, $longitude);
         $this->memoryCache[$cacheKey] = $limit;
 

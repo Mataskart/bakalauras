@@ -51,17 +51,29 @@ export async function clearBuffer() {
 }
 
 /**
- * Trim the last N minutes of the drive from scoring (stationary period at end).
- * Returns events with recordedAt <= (lastEventTime - 15 minutes).
+ * Drop stationary events from the end of the buffer (e.g. waiting to park after arriving).
+ * Walks backwards and removes trailing events where speed < STATIONARY_SPEED_KMH.
+ * Stops as soon as a moving event is found, so the active driving portion is kept intact.
+ * If no event has a speed value, the full buffer is returned unchanged.
  * @param {BufferedEvent[]} buffer
  * @returns {BufferedEvent[]}
  */
 export function trimStationaryTail(buffer) {
   if (buffer.length === 0) return [];
-  const last = buffer[buffer.length - 1];
-  const lastTime = new Date(last.recordedAt).getTime();
-  const cutOff = lastTime - STATIONARY_END_MINUTES * 60 * 1000;
-  return buffer.filter((e) => new Date(e.recordedAt).getTime() <= cutOff);
+
+  let lastMovingIndex = -1;
+  for (let i = buffer.length - 1; i >= 0; i--) {
+    const speed = buffer[i].speed;
+    if (speed != null && speed >= STATIONARY_SPEED_KMH) {
+      lastMovingIndex = i;
+      break;
+    }
+  }
+
+  // No event with a speed value — can't determine what's stationary, keep everything.
+  if (lastMovingIndex === -1) return buffer;
+
+  return buffer.slice(0, lastMovingIndex + 1);
 }
 
 /**
