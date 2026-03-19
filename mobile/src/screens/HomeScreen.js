@@ -6,6 +6,7 @@ import {
 import { Accelerometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import client from '../api/client';
 import { getBuffer, clearBuffer } from '../driveBuffer';
 import { uploadDriveAndClear } from '../uploadDrive';
@@ -61,6 +62,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     requestPermissions().catch(() => {});
+    // Close any session that was left open if the app was killed mid-drive
+    AsyncStorage.getItem('keliq_active_session_id').then((id) => {
+      if (!id) return;
+      client.patch(`/sessions/${id}/stop`, { endedAt: new Date().toISOString() }).catch(() => {});
+      AsyncStorage.removeItem('keliq_active_session_id').catch(() => {});
+    }).catch(() => {});
     return () => stopTracking();
   }, []);
 
@@ -209,6 +216,7 @@ export default function HomeScreen() {
         const startedAt = buffer[0].recordedAt;
         const startRes = await client.post('/sessions', { startedAt });
         sessionIdRef.current = startRes.data.id;
+        AsyncStorage.setItem('keliq_active_session_id', String(startRes.data.id)).catch(() => {});
         for (let i = 0; i < buffer.length; i += BATCH_SIZE) {
           const batch = buffer.slice(i, i + BATCH_SIZE).map((e) => ({
             latitude: e.latitude,
@@ -226,6 +234,7 @@ export default function HomeScreen() {
       } catch (e) {
         console.log('Auto session takeover error:', e.message);
         sessionIdRef.current = null;
+        AsyncStorage.removeItem('keliq_active_session_id').catch(() => {});
       }
     }
     startTracking();
@@ -239,6 +248,7 @@ export default function HomeScreen() {
       setSpeedLimit(null);
       const res = await client.post('/sessions', {});
       sessionIdRef.current = res.data.id;
+      AsyncStorage.setItem('keliq_active_session_id', String(res.data.id)).catch(() => {});
       startTracking();
     } catch (error) {
       Alert.alert('Error', error.response?.data?.error || error.message || 'Could not start');
@@ -261,6 +271,7 @@ export default function HomeScreen() {
         });
         setScore(stopRes.data?.score ?? null);
         sessionIdRef.current = null;
+        AsyncStorage.removeItem('keliq_active_session_id').catch(() => {});
       }
     } catch (error) {
       Alert.alert('Error', error.response?.data?.error || error.message || 'Could not save drive');
@@ -287,6 +298,7 @@ export default function HomeScreen() {
           });
           setScore(stopRes.data?.score ?? null);
           sessionIdRef.current = null;
+          AsyncStorage.removeItem('keliq_active_session_id').catch(() => {});
           setSpeedLimit(null);
         } else {
           // User hit STOP before the app finished taking over: upload buffer as-is, no trim

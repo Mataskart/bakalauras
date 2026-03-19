@@ -15,14 +15,18 @@ import {
   hasBeenStationaryFor15Min,
 } from './driveBuffer';
 import { uploadDriveAndClear } from './uploadDrive';
+import { logWatchPing, appendLog } from './debugLog';
 
 const LOCATION_TASK_NAME = 'keliq-background-location';
 const STORAGE_MODE_KEY = 'keliq_background_mode';
 const MODE_WATCH = 'watch';
 const MODE_RECORD = 'record';
-const DRIVING_START_KMH = 10;
-const WATCH_INTERVAL_MS = 3 * 60 * 1000;   // 3 min when not driving
-const RECORD_INTERVAL_MS = 2000;            // 2 s when recording
+const DRIVING_START_KMH = 25;
+// Watch mode: primary trigger is 50 m of movement (~6 s at 30 km/h → near-immediate detection).
+// timeInterval is a fallback so the task also wakes up every 2 min while stationary.
+const WATCH_INTERVAL_MS = 2 * 60 * 1000;
+const WATCH_DISTANCE_M = 50;
+const RECORD_INTERVAL_MS = 1500;            // 1.5 s when recording
 const RECORDING_CHANNEL_ID = 'keliq-recording';
 
 let recordingNotificationId = null;
@@ -84,9 +88,27 @@ function locationToEvent(location) {
   };
 }
 
+const watchOpts = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: WATCH_INTERVAL_MS,
+  distanceInterval: WATCH_DISTANCE_M,
+};
+
+const recordOpts = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: RECORD_INTERVAL_MS,
+  distanceInterval: 0,
+  foregroundService: {
+    notificationTitle: 'keliq',
+    notificationBody: 'Recording drive',
+    notificationColor: '#007ACC',
+  },
+};
+
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.warn('Background location task error:', error.message);
+    await appendLog(`TASK ERROR: ${error.message}`);
     return;
   }
   if (!data?.locations?.length) return;
@@ -98,7 +120,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     const last = locations[locations.length - 1];
     const speedMs = last.coords?.speed;
     const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
+
     if (speedKmh >= DRIVING_START_KMH) {
+      await logWatchPing({ speedKmh, action: `DRIVE DETECTED — switching to RECORD` });
       await setMode(MODE_RECORD);
       await clearBuffer();
       await showRecordingNotification();
@@ -106,21 +130,16 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
       } catch (_) {}
       try {
-        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: RECORD_INTERVAL_MS,
-          distanceInterval: 0,
-          foregroundService: {
-            notificationTitle: 'keliq',
-            notificationBody: 'Recording drive',
-            notificationColor: '#007ACC',
-          },
-        });
+        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, recordOpts);
       } catch (e) {
         console.warn('Start record updates failed:', e.message);
+        await appendLog(`RECORD start failed: ${e.message}`);
         await setMode(MODE_WATCH);
         await dismissRecordingNotification();
       }
+    } else {
+      // Below threshold — log and stay in watch mode
+      await logWatchPing({ speedKmh, action: `below threshold (${DRIVING_START_KMH} km/h), staying in watch` });
     }
     return;
   }
@@ -132,6 +151,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     }
     const buffer = await getBuffer();
     if (hasBeenStationaryFor15Min(buffer)) {
+      await appendLog(`RECORD: stationary 15 min — auto-completing drive (${buffer.length} events)`);
       try {
         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
       } catch (_) {}
@@ -140,14 +160,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         await uploadDriveAndClear(trimmed);
       } catch (e) {
         console.warn('Upload error:', e.message);
+        await appendLog(`Upload error: ${e.message}`);
       }
       await setMode(MODE_WATCH);
       await dismissRecordingNotification();
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: WATCH_INTERVAL_MS,
-        distanceInterval: 0,
-      });
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, watchOpts);
     }
   }
 });
@@ -194,13 +211,11 @@ export async function startBackgroundWatching() {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     } catch (_) {}
     await setMode(MODE_WATCH);
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: WATCH_INTERVAL_MS,
-      distanceInterval: 0,
-    });
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, watchOpts);
+    await appendLog('startBackgroundWatching: watch started');
     return true;
-  } catch (_) {
+  } catch (e) {
+    await appendLog(`startBackgroundWatching failed: ${e.message}`);
     return false;
   }
 }
@@ -225,32 +240,19 @@ export async function completeCurrentDriveAndStop() {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
   } catch (_) {}
   const buffer = await getBuffer();
+  await appendLog(`completeCurrentDriveAndStop: uploading ${buffer.length} events (no trim)`);
   let result = { score: null };
   try {
     result = await uploadDriveAndClear(buffer);
   } catch (e) {
     console.warn('Upload error:', e.message);
+    await appendLog(`Upload error: ${e.message}`);
   }
   await setMode(MODE_WATCH);
   await dismissRecordingNotification();
-  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-    accuracy: Location.Accuracy.Balanced,
-    timeInterval: WATCH_INTERVAL_MS,
-    distanceInterval: 0,
-  });
+  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, watchOpts);
   return result;
 }
-
-const recordOpts = {
-  accuracy: Location.Accuracy.Balanced,
-  timeInterval: RECORD_INTERVAL_MS,
-  distanceInterval: 0,
-  foregroundService: {
-    notificationTitle: 'keliq',
-    notificationBody: 'Recording drive',
-    notificationColor: '#007ACC',
-  },
-};
 
 /** Pause background location updates so the app can take over (e.g. with accelerometer). */
 export async function pauseBackgroundRecording() {
@@ -267,5 +269,6 @@ export async function resumeBackgroundRecording() {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, recordOpts);
   } catch (e) {
     console.warn('Resume record updates failed:', e.message);
+    await appendLog(`resumeBackgroundRecording failed: ${e.message}`);
   }
 }
