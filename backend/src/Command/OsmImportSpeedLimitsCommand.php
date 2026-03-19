@@ -82,7 +82,9 @@ class OsmImportSpeedLimitsCommand extends Command
 
         while (($line = fgets($fh)) !== false) {
             $linesRead++;
-            $line = trim($line);
+            // GeoJSONSeq (RFC 8142) prefixes each record with ASCII 0x1E (Record Separator).
+            // Strip it along with normal whitespace so json_decode gets clean JSON.
+            $line = trim($line, " \t\n\r\0\x0B\x1E");
             if ($line === '') {
                 continue;
             }
