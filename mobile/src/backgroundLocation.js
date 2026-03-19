@@ -88,10 +88,18 @@ function locationToEvent(location) {
   };
 }
 
+// foregroundService is required on Android 8+ for the OS to keep the location
+// service alive when the app is completely closed. Without it updates only fire
+// while the app is in the foreground.
 const watchOpts = {
   accuracy: Location.Accuracy.Balanced,
   timeInterval: WATCH_INTERVAL_MS,
   distanceInterval: WATCH_DISTANCE_M,
+  foregroundService: {
+    notificationTitle: 'keliq',
+    notificationBody: 'Auto-detect: watching for drive start',
+    notificationColor: '#30363d',
+  },
 };
 
 const recordOpts = {

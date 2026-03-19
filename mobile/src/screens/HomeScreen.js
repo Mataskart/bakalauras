@@ -505,7 +505,7 @@ export default function HomeScreen() {
             <Text style={styles.statLabel}>LIMIT</Text>
             <Text style={[
               styles.statValue,
-              currentSpeed != null && speedLimit != null && currentSpeed > speedLimit
+              currentSpeed != null && speedLimit != null && currentSpeed > speedLimit + 10
                 ? { color: DANGER }
                 : null,
             ]}>

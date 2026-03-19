@@ -36,9 +36,11 @@ class SpeedLimitCacheRepository extends ServiceEntityRepository
     /**
      * Finds the nearest cached entry within deltaDeg degrees of the given coordinates.
      * Used when the exact rounded coordinate has no match (GPS slightly off-road).
-     * deltaDeg ≈ 0.001° ≈ 100 m — large enough to bridge the gap between GPS noise and road nodes.
+     * deltaDeg = 0.0001° ≈ 11 m — one grid cell (data is stored at 4 decimal places).
+     * This is the tightest useful tolerance: large enough to bridge GPS drift to a nearby
+     * road node, small enough to avoid picking up parallel streets or adjacent roads.
      */
-    public function findNearestWithin(float $lat, float $lon, float $deltaDeg = 0.001): ?SpeedLimitCache
+    public function findNearestWithin(float $lat, float $lon, float $deltaDeg = 0.0001): ?SpeedLimitCache
     {
         return $this->createQueryBuilder('s')
             ->where('s.latRounded BETWEEN :minLat AND :maxLat')

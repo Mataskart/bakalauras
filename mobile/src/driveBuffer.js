@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BUFFER_KEY = 'keliq_drive_buffer';
 const STATIONARY_SPEED_KMH = 5;
-const STATIONARY_END_MINUTES = 15;
+const STATIONARY_END_MINUTES = 5;
 
 /**
  * @typedef {Object} BufferedEvent
