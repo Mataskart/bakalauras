@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,7 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -36,7 +39,10 @@
     "plugins": [
       [
         "expo-notifications",
-        { "icon": "./assets/icon.png", "color": "#007ACC" }
+        {
+          "icon": "./assets/icon.png",
+          "color": "#007ACC"
+        }
       ],
       [
         "expo-location",
@@ -45,7 +51,8 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "./plugins/withLocationStopWithTask"
+      "./plugins/withLocationStopWithTask",
+      "expo-background-task"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

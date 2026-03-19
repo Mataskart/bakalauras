@@ -435,11 +435,21 @@ export default function HomeScreen() {
                 stopBackgroundUpdates();
                 return;
               }
+              console.log('[AutoToggle] checking background permission...');
               const alreadyGranted = await hasBackgroundLocationPermission();
+              console.log('[AutoToggle] alreadyGranted:', alreadyGranted);
               if (alreadyGranted) {
+                console.log('[AutoToggle] already granted — enabling auto-detect');
                 setAutoDetect(true);
                 await persistAutoDetect(true);
-                startBackgroundWatching().catch(() => {});
+                console.log('[AutoToggle] calling startBackgroundWatching (already granted path)...');
+                try {
+                  await startBackgroundWatching();
+                  console.log('[AutoToggle] startBackgroundWatching OK');
+                } catch (e) {
+                  console.log('[AutoToggle] startBackgroundWatching ERROR:', e?.message);
+                  Alert.alert('Background service error', String(e?.message ?? e));
+                }
                 promptBatteryOptimization();
                 return;
               }
@@ -451,11 +461,21 @@ export default function HomeScreen() {
                   {
                     text: 'Continue',
                     onPress: async () => {
+                      console.log('[AutoToggle] requesting background permission...');
                       const granted = await requestBackgroundLocationPermission();
+                      console.log('[AutoToggle] permission result:', granted);
                       if (granted) {
+                        console.log('[AutoToggle] granted — enabling auto-detect');
                         setAutoDetect(true);
                         await persistAutoDetect(true);
-                        startBackgroundWatching().catch(() => {});
+                        console.log('[AutoToggle] calling startBackgroundWatching (new grant path)...');
+                        try {
+                          await startBackgroundWatching();
+                          console.log('[AutoToggle] startBackgroundWatching OK');
+                        } catch (e) {
+                          console.log('[AutoToggle] startBackgroundWatching ERROR:', e?.message);
+                          Alert.alert('Background service error', String(e?.message ?? e));
+                        }
                         promptBatteryOptimization();
                         return;
                       }

@@ -1,10 +1,10 @@
 /**
  * Daily summary at 21:00 local: fetch today's average score and show one notification.
- * Uses Background Fetch (runs periodically); when run around 21:00 we send the summary.
+ * Uses BackgroundTask (WorkManager); when run around 21:00 we send the summary.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import client from './api/client';
 import { showDailySummaryNotification } from './notifications';
@@ -26,9 +26,9 @@ TaskManager.defineTask(DAILY_SUMMARY_TASK, async () => {
   const today = todayLocalDateStr();
   try {
     const lastSent = await AsyncStorage.getItem(LAST_SENT_KEY);
-    if (lastSent === today) return BackgroundFetch.BackgroundFetchResult.NoData;
+    if (lastSent === today) return BackgroundTask.BackgroundTaskResult.Success;
 
-    if (hour < 20 || hour > 22) return BackgroundFetch.BackgroundFetchResult.NoData;
+    if (hour < 20 || hour > 22) return BackgroundTask.BackgroundTaskResult.Success;
 
     const { data } = await client.get('/me/today-stats', { params: { date: today } });
     await showDailySummaryNotification({
@@ -36,24 +36,24 @@ TaskManager.defineTask(DAILY_SUMMARY_TASK, async () => {
       driveCount: data.driveCount ?? 0,
     });
     await AsyncStorage.setItem(LAST_SENT_KEY, today);
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    return BackgroundTask.BackgroundTaskResult.Success;
   } catch (e) {
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
 
 export async function registerDailySummaryTask() {
   try {
-    await BackgroundFetch.registerTaskAsync(DAILY_SUMMARY_TASK, {
+    await BackgroundTask.registerTaskAsync(DAILY_SUMMARY_TASK, {
       minimumInterval: 60 * 15,
     });
   } catch (e) {
-    console.warn('Background fetch register failed:', e.message);
+    console.warn('BackgroundTask register failed:', e.message);
   }
 }
 
 export async function unregisterDailySummaryTask() {
   try {
-    await BackgroundFetch.unregisterTaskAsync(DAILY_SUMMARY_TASK);
+    await BackgroundTask.unregisterTaskAsync(DAILY_SUMMARY_TASK);
   } catch (_) {}
 }
