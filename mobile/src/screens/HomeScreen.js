@@ -392,6 +392,21 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // Shown once after Auto is enabled so the user knows to exempt from battery optimization.
+  const promptBatteryOptimization = async () => {
+    const shown = await AsyncStorage.getItem('keliq_battery_tip_shown').catch(() => null);
+    if (shown) return;
+    await AsyncStorage.setItem('keliq_battery_tip_shown', '1').catch(() => {});
+    Alert.alert(
+      'Allow background activity',
+      'For auto-detection to keep working after closing the app, disable battery optimization for keliq:\n\nOpen Settings → Apps → keliq → Battery → select "Unrestricted"\n\nWithout this the OS will stop the service when the app is closed.',
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+      ]
+    );
+  };
+
   const getScoreColor = (s) => {
     if (s >= 80) return '#3fb950';
     if (s >= 50) return '#d29922';
@@ -425,6 +440,7 @@ export default function HomeScreen() {
                 setAutoDetect(true);
                 await persistAutoDetect(true);
                 startBackgroundWatching().catch(() => {});
+                promptBatteryOptimization();
                 return;
               }
               Alert.alert(
@@ -440,6 +456,7 @@ export default function HomeScreen() {
                         setAutoDetect(true);
                         await persistAutoDetect(true);
                         startBackgroundWatching().catch(() => {});
+                        promptBatteryOptimization();
                         return;
                       }
                       await Linking.openSettings();
