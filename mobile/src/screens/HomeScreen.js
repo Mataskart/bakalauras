@@ -119,6 +119,13 @@ export default function HomeScreen() {
         await pushOneEvent(location, peak);
         peakAccelerometer.current = { x: 0, y: 0, z: 0 };
 
+        // Fetch speed limit for current position and update display
+        try {
+          const { lat, lon } = { lat: location.coords.latitude, lon: location.coords.longitude };
+          const res = await client.get(`/speed-limit?lat=${lat}&lon=${lon}`);
+          setSpeedLimit(res.data.speedLimitKmh ?? null);
+        } catch (_) {}
+
         if (autoDetect) {
           const speedMs = location.coords.speed;
           const speedKmh = (speedMs != null && speedMs >= 0) ? speedMs * 3.6 : 0;
